@@ -391,7 +391,7 @@ endif()
 # Legacy FINCEPT_ALLOW_QT_DRIFT=ON is honoured and maps to ANY for back-compat.
 set(FINCEPT_QT_VERSION 6.8.3)
 set(FINCEPT_QT_VERSION_MINOR 6.8)
-set(FINCEPT_QT_PIN_MODE "MINOR" CACHE STRING "Qt version pin mode: EXACT|MINOR|ANY")
+set(FINCEPT_QT_PIN_MODE "ANY" CACHE STRING "Qt version pin mode: EXACT|MINOR|ANY")
 set_property(CACHE FINCEPT_QT_PIN_MODE PROPERTY STRINGS EXACT MINOR ANY)
 if(FINCEPT_ALLOW_QT_DRIFT)
     set(FINCEPT_QT_PIN_MODE "ANY")
@@ -436,19 +436,19 @@ if(NOT CMAKE_PREFIX_PATH)
         # Probe common Qt Online Installer default locations.
         if(WIN32)
             file(GLOB _fincept_qt_candidates
-                "C:/Qt/6.8.*/msvc*_64"
-                "C:/Qt/6.8.*/mingw*_64"
-                "$ENV{USERPROFILE}/Qt/6.8.*/msvc*_64")
+                "C:/Qt/6.*/msvc*_64"
+                "C:/Qt/6.*/mingw*_64"
+                "$ENV{USERPROFILE}/Qt/6.*/msvc*_64")
         elseif(APPLE)
             file(GLOB _fincept_qt_candidates
-                "$ENV{HOME}/Qt/6.8.*/macos"
-                "/opt/Qt/6.8.*/macos"
-                "/usr/local/Qt/6.8.*/macos")
+                "$ENV{HOME}/Qt/6.*/macos"
+                "/opt/Qt/6.*/macos"
+                "/usr/local/Qt/6.*/macos")
         else()
             file(GLOB _fincept_qt_candidates
-                "$ENV{HOME}/Qt/6.8.*/gcc_64"
-                "/opt/Qt/6.8.*/gcc_64"
-                "/usr/local/Qt/6.8.*/gcc_64")
+                "$ENV{HOME}/Qt/6.*/gcc_64"
+                "/opt/Qt/6.*/gcc_64"
+                "/usr/local/Qt/6.*/gcc_64")
         endif()
         list(SORT _fincept_qt_candidates ORDER DESCENDING)
         list(LENGTH _fincept_qt_candidates _fincept_qt_count)
@@ -477,14 +477,14 @@ if(NOT Qt6_FOUND)
         "Qt6 not found. Fincept Terminal requires Qt 6.8.x.\n\n"
         "Fix (pick one):\n"
         "  1. Set the QT_DIR environment variable:\n"
-        "       Windows:  set QT_DIR=C:\\Qt\\6.8.3\\msvc2022_64\n"
-        "       Linux:    export QT_DIR=~/Qt/6.8.3/gcc_64\n"
-        "       macOS:    export QT_DIR=~/Qt/6.8.3/macos\n\n"
+        "       Windows:  set QT_DIR=C:\\Qt\\6.*/msvc2022_64\n"
+        "       Linux:    export QT_DIR=~/Qt/6.*/gcc_64\n"
+        "       macOS:    export QT_DIR=~/Qt/6.*/macos\n\n"
         "  2. Copy CMakeUserPresets.json.example to CMakeUserPresets.json\n"
         "     and set CMAKE_PREFIX_PATH to your Qt install path.\n\n"
         "  3. Pass it on the command line:\n"
-        "       cmake -DCMAKE_PREFIX_PATH=/path/to/Qt/6.8.3/kit ...\n\n"
-        "Install Qt 6.8.3 from: https://www.qt.io/download-qt-installer")
+        "       cmake -DCMAKE_PREFIX_PATH=/path/to/Qt/6.*/kit ...\n\n"
+        "Install Qt 6.*/ from: https://www.qt.io/download-qt-installer")
 endif()
 
 find_package(Qt6 ${_FINCEPT_QT_VER_ARGS} REQUIRED COMPONENTS

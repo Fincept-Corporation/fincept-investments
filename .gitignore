@@ -195,3 +195,5 @@ fincept-qt/docs/CRYPTO_WALLET_CONNECT.md
 *.md
 !README.md
 !**/README.md
+!docs/LLM_AUTO_TRADER_DESIGN.md
+build/
