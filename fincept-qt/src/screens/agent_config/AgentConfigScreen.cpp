@@ -14,7 +14,6 @@
 #include "screens/agent_config/ToolsViewPanel.h"
 #include "screens/agent_config/WorkflowsViewPanel.h"
 #include "services/agents/AgentService.h"
-#include "services/cloud/CloudSyncEngine.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -423,8 +422,6 @@ void AgentConfigScreen::showEvent(QShowEvent* event) {
         ensure_panel_built(services::AgentViewMode::Agents);
         services::AgentService::instance().discover_agents();
     }
-    // Rate-gated pull of cloud agent configs on screen entry (no-op when sync is off).
-    fincept::services::cloud::CloudSyncEngine::instance().request_pull(QStringLiteral("agent_config"));
 }
 
 void AgentConfigScreen::hideEvent(QHideEvent* event) {

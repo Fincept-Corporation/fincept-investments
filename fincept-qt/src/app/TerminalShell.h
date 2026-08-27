@@ -17,8 +17,8 @@ class CrashRecovery;
 /// Process-singleton owning everything that lives "above any single window."
 ///
 /// The plan calls for `WindowFrame` to shed concerns it shouldn't own —
-/// authentication, lock state, services init, theme, profile — into a place
-/// that survives window creation and destruction. That place is `TerminalShell`.
+/// services init, theme, profile — into a place that survives window creation
+/// and destruction. That place is `TerminalShell`.
 ///
 /// Phase 1 ships the **skeleton**:
 ///   - `initialise()` is the formal "shell came up" event. main.cpp calls it
@@ -28,11 +28,6 @@ class CrashRecovery;
 ///     the existing singletons). These accessors give Phase 2-9 code a single
 ///     ergonomic entry point: `TerminalShell::instance().window_registry()`
 ///     instead of `WindowRegistry::instance()` everywhere.
-///
-/// Phase 1b lifts auth + lock + InactivityGuard ownership into the shell and
-/// installs `LockOverlayController`. That work needs careful coordination
-/// with the PIN security audit invariants and is staged separately. For now
-/// existing auth/lock paths in WindowFrame keep working unchanged.
 ///
 /// Threading: UI-thread only. There is exactly one TerminalShell per process.
 /// Calling instance() from a worker thread is a bug.
@@ -52,7 +47,6 @@ class TerminalShell : public QObject {
     ///     new directories the multi-window refactor introduces).
     ///   - Resolves the active ProfileId so every later phase can use it.
     ///
-    /// Phase 1b adds lock controller installation here.
     /// Phase 4 adds builtin_actions registration here.
     void initialise();
 
@@ -60,20 +54,7 @@ class TerminalShell : public QObject {
     /// flushes can run before Qt destroys QApplication. Idempotent.
     void shutdown();
 
-    /// Phase 1 final lift (decision 1.5): bootstrap auth/lock services so
-    /// they live above any WindowFrame. Initialises AuthManager (loads
-    /// saved session, validates with server), warms PinManager from
-    /// SecureStorage, and configures InactivityGuard's lock timeout from
-    /// SettingsRepository.
-    ///
-    /// Called from main.cpp once `initialise()` has run and Qt's event
-    /// loop is alive — auth needs HTTP, which means QNetworkAccessManager
-    /// (and an event-loop-friendly stack). Idempotent: a second call is
-    /// a warning + no-op.
-    void bootstrap_auth();
-
     bool is_initialised() const { return initialised_; }
-    bool is_auth_bootstrapped() const { return auth_bootstrapped_; }
 
     /// Active profile UUID. Stable across the session. Null if shutdown()
     /// has been called or initialise() hasn't yet.
@@ -132,9 +113,6 @@ class TerminalShell : public QObject {
 
     /// Latched at boot in initialise(); read via started_after_crash().
     bool started_after_crash_ = false;
-
-    /// Latched at the end of bootstrap_auth() — guards re-entrancy.
-    bool auth_bootstrapped_ = false;
 };
 
 } // namespace fincept

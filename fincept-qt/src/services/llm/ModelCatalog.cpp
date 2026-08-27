@@ -163,7 +163,6 @@ const CatalogEntry kCatalog[] = {
     // Fincept's /research/llm/async wraps various upstream models. We
     // don't know which one is selected server-side, so go with a generous
     // default that most upstreams accept.
-    {"fincept", "*", kNoPublishedCap},
 };
 
 // Glob → regex. Supports * (zero-or-more) and ? (single char). Anchored.

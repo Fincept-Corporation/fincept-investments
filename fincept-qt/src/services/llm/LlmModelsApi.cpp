@@ -1,6 +1,5 @@
 // Per-provider model-list discovery. Async GET on the GUI thread; emits models_fetched.
 
-#include "auth/AuthManager.h"
 #include "core/config/AppConfig.h"
 #include "core/logging/Logger.h"
 #include "services/llm/LlmService.h"
@@ -43,8 +42,8 @@ QString LlmService::get_models_url(const QString& provider, const QString& api_k
         return base + "/api/tags";
     }
 
-    // Custom base_url (except fincept) — assume OpenAI-compatible /v1/models.
-    if (!base_url.isEmpty() && p != "fincept") {
+    // Custom base_url — assume OpenAI-compatible /v1/models.
+    if (!base_url.isEmpty()) {
         QString base = base_url;
         while (base.endsWith('/'))
             base.chop(1);
@@ -82,9 +81,6 @@ QString LlmService::get_models_url(const QString& provider, const QString& api_k
         return "https://api.moonshot.ai/v1/models";
     if (p == "aihubmix")
         return "https://aihubmix.com/v1/models"; // fallback if prefilled base_url was cleared
-    // fincept publishes no models endpoint — /research/llm/models is a 404, and
-    // /research/llm/async takes no `model` field at all (the backend picks).
-    // fetch_models() short-circuits to the known list before reaching here.
     // minimax has no public /v1/models — caller falls back to known models.
     return {};
 }
@@ -102,14 +98,6 @@ QMap<QString, QString> LlmService::get_models_headers(const QString& provider, c
             h["x-goog-api-key"] = api_key;
     } else if (p == "ollama") {
         // No auth.
-    } else if (p == "fincept") {
-        // Same fallback as ensure_config — resolve via AuthManager
-        // (session → SecureStorage), never the plaintext settings row (CR-08).
-        QString resolved_key = api_key;
-        if (resolved_key.isEmpty())
-            resolved_key = fincept::auth::AuthManager::instance().fincept_api_key();
-        if (!resolved_key.isEmpty())
-            h["X-API-Key"] = resolved_key;
     } else {
         // OpenAI-compatible.
         if (!api_key.isEmpty())
@@ -155,21 +143,6 @@ QStringList LlmService::parse_models_response(const QString& provider, const QBy
             if (!name.isEmpty())
                 models.append(name);
         }
-    } else if (p == "fincept") {
-        // data may be either {"models":[...]} or a direct array.
-        QJsonValue data_val = root["data"];
-        QJsonArray arr;
-        if (data_val.isObject())
-            arr = data_val.toObject()["models"].toArray();
-        else if (data_val.isArray())
-            arr = data_val.toArray();
-        for (const auto& v : arr) {
-            QString id = v.isString() ? v.toString() : v.toObject()["id"].toString();
-            if (!id.isEmpty())
-                models.append(id);
-        }
-        if (models.isEmpty())
-            models = {"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5"};
     } else {
         // OpenAI-compatible: {"data": [{"id": ...}]}.
         QJsonArray arr = root["data"].toArray();
@@ -185,13 +158,6 @@ QStringList LlmService::parse_models_response(const QString& provider, const QBy
 }
 
 void LlmService::fetch_models(const QString& provider, const QString& api_key, const QString& base_url) {
-    // No public /models endpoint for fincept — return known list immediately.
-    if (provider.toLower() == "fincept") {
-        emit models_fetched(provider,
-                            {"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"}, {});
-        return;
-    }
-
     const QString url = get_models_url(provider, api_key, base_url);
     if (url.isEmpty()) {
         emit models_fetched(provider, {}, "Unknown provider: " + provider);

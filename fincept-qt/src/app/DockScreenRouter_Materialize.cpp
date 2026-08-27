@@ -7,7 +7,6 @@
 
 #include "app/DockScreenRouter.h"
 #include "app/WindowFrame.h"
-#include "auth/InactivityGuard.h"
 #include "core/components/PopularityTracker.h"
 #include "core/keys/WindowCycler.h"
 #include "core/logging/Logger.h"

@@ -24,7 +24,6 @@
 #include "screens/portfolio/PortfolioStatsRibbon.h"
 #include "screens/portfolio/PortfolioStatusBar.h"
 #include "screens/portfolio/PortfolioTxnPanel.h"
-#include "services/cloud/CloudSyncEngine.h"
 #include "services/file_manager/FileManagerService.h"
 #include "services/portfolio/PortfolioService.h"
 #include "storage/repositories/SettingsRepository.h"
@@ -51,13 +50,6 @@ namespace fincept::screens {
 PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
     build_ui();
     refresh_theme(); // Apply theme-aware font sizes and colors on first build
-
-    // Reload the portfolio list from the local cache when a cloud pull lands.
-    connect(&fincept::services::cloud::CloudSyncEngine::instance(),
-            &fincept::services::cloud::CloudSyncEngine::cloud_data_changed, this, [](const QString& entity) {
-                if (entity == QLatin1String("portfolio"))
-                    services::PortfolioService::instance().load_portfolios();
-            });
 
     // Connect to PortfolioService signals
     auto& svc = services::PortfolioService::instance();
@@ -150,8 +142,6 @@ void PortfolioScreen::showEvent(QShowEvent* event) {
     status_bar_->start_clock();
     if (blotter_ && !current_summary_.portfolio.broker_account_id.isEmpty())
         blotter_->hub_resubscribe_broker_quotes(current_summary_.portfolio.broker_account_id);
-    // Rate-gated pull of cloud portfolios on screen entry (no-op when sync is off).
-    fincept::services::cloud::CloudSyncEngine::instance().request_pull(QStringLiteral("portfolio"));
 }
 
 void PortfolioScreen::hideEvent(QHideEvent* event) {

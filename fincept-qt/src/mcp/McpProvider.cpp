@@ -565,9 +565,8 @@ bool McpProvider::destructive_allowed() {
 
 std::optional<ToolResult> McpProvider::check_authorization(const QString& name, AuthLevel auth_required,
                                                            bool is_destructive, bool destructive_declared) const {
-    // We don't import AuthManager here to avoid pulling auth headers into
-    // McpTypes.h consumers — instead we expose a hook that the app installs
-    // at startup.
+    // The confirmation surface lives in the app layer — we expose a hook the
+    // app installs at startup rather than pulling UI headers in here.
     //
     // Order of checks:
     //   1. Nothing declared → pass immediately.
@@ -576,8 +575,8 @@ std::optional<ToolResult> McpProvider::check_authorization(const QString& name, 
     //      only distinguish agent calls, and the chat path is the one that was
     //      unguarded.
     //   3. Installed checker → its verdict wins for everything else.
-    //   4. No checker + AuthLevel >= Verified → fail closed (genuine privilege
-    //      escalation that must not happen unauthenticated).
+    //   4. No checker + AuthLevel::ExplicitConfirm → fail closed (the user
+    //      never got the chance to confirm).
     if (auth_required == AuthLevel::None && !is_destructive)
         return std::nullopt;
 
@@ -611,9 +610,9 @@ std::optional<ToolResult> McpProvider::check_authorization(const QString& name, 
                               .arg(is_destructive ? "true" : "false"));
             return ToolResult::fail(QString("Tool '%1' requires %2 auth").arg(name, auth_level_str(auth_required)));
         }
-    } else if (auth_required >= AuthLevel::Verified) {
-        // Fail-closed: Verified/Subscribed/ExplicitConfirm cannot be
-        // safely evaluated without a checker. Refuse the call.
+    } else if (auth_required == AuthLevel::ExplicitConfirm) {
+        // Fail-closed: ExplicitConfirm cannot be safely evaluated without a
+        // checker — there is nothing to raise the confirmation with.
         LOG_WARN(TAG, QString("Tool '%1' blocked: no AuthChecker registered (required=%2)")
                           .arg(name, auth_level_str(auth_required)));
         return ToolResult::fail("Tool requires user confirmation but no authorisation hook is installed");

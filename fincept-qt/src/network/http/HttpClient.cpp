@@ -122,31 +122,13 @@ HttpClient::HttpClient() {
 }
 
 QNetworkRequest HttpClient::build_request(const QString& url, const Headers& extra_headers) const {
-    const bool is_relative = !url.startsWith("http");
-    const QString full_url = is_relative ? (base_url_ + url) : url;
-    QUrl qurl(full_url);
-    QNetworkRequest req{qurl};
+    const QString full_url = url.startsWith("http") ? url : (base_url_ + url);
+    QNetworkRequest req{QUrl(full_url)};
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setHeader(QNetworkRequest::UserAgentHeader, "FinceptTerminal/4.0");
 
-    // Only attach auth on same-host requests — third-party absolute URLs (Slack/Discord/webhooks)
-    // share this singleton and must NOT receive X-API-Key / X-Session-Token.
-    const bool same_host = is_relative || [&]() {
-        const QUrl base(base_url_);
-        return !base.host().isEmpty() && qurl.host().compare(base.host(), Qt::CaseInsensitive) == 0;
-    }();
-
-    if (same_host) {
-        if (!api_key_.isEmpty()) {
-            req.setRawHeader("X-API-Key", api_key_.toUtf8());
-        }
-        if (!session_token_.isEmpty()) {
-            req.setRawHeader("X-Session-Token", session_token_.toUtf8());
-        }
-    }
-
     // Applied last so a caller can override any default above for this one
-    // request without touching the shared singleton's auth state.
+    // request.
     for (auto it = extra_headers.constBegin(); it != extra_headers.constEnd(); ++it)
         req.setRawHeader(it.key(), it.value());
     return req;
@@ -176,8 +158,8 @@ void HttpClient::handle_reply(QNetworkReply* reply, JsonCallback callback, const
             LOG_WARN("HTTP",
                      QString("HTTP %1: %2 — %3").arg(status).arg(sanitized.toString()).arg(reply->errorString()));
 
-            // 401/403 stay a bare "HTTP_<status>" — session-expiry detection in
-            // AuthApi/AuthManager/SessionGuard matches on exactly that string.
+            // 401/403 stay a bare "HTTP_<status>" so callers can match on
+            // exactly that string rather than parsing a server message.
             if (status == 401 || status == 403) {
                 cb(Result<QJsonDocument>::err(QString("HTTP_%1").arg(status).toStdString()));
                 return;
@@ -239,18 +221,6 @@ void HttpClient::del(const QString& url, const QJsonObject& body, JsonCallback c
     auto* reply =
         nam_->sendCustomRequest(build_request(url, extra_headers), "DELETE", doc.toJson(QJsonDocument::Compact));
     handle_reply(reply, std::move(callback), context);
-}
-
-void HttpClient::set_auth_header(const QString& api_key) {
-    api_key_ = api_key;
-}
-
-void HttpClient::set_session_token(const QString& token) {
-    session_token_ = token;
-}
-
-void HttpClient::clear_session_token() {
-    session_token_.clear();
 }
 
 void HttpClient::set_base_url(const QString& base) {

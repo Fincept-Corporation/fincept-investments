@@ -3,7 +3,6 @@
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
 #include "core/session/ScreenStateManager.h"
-#include "services/cloud/CloudSyncEngine.h"
 #include "services/file_manager/FileManagerService.h"
 #include "ui/theme/Theme.h"
 
@@ -149,15 +148,6 @@ NotesScreen::NotesScreen(QWidget* parent) : QWidget(parent) {
     setStyleSheet(QString("background: %1;").arg(BG_BASE()));
     build_ui();
     load_notes();
-
-    // Reload from the local cache when a cloud pull updates notes.
-    connect(&fincept::services::cloud::CloudSyncEngine::instance(),
-            &fincept::services::cloud::CloudSyncEngine::cloud_data_changed, this, [this](const QString& entity) {
-                if (entity == QLatin1String("note")) {
-                    load_notes();
-                    update_notes_list();
-                }
-            });
 }
 
 void NotesScreen::build_ui() {
@@ -1062,8 +1052,6 @@ void NotesScreen::restore_state(const QVariantMap& state) {
 void NotesScreen::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
     subscribe_mcp_events();
-    // Rate-gated pull of cloud notes on screen entry (no-op when sync is off).
-    fincept::services::cloud::CloudSyncEngine::instance().request_pull(QStringLiteral("note"));
 }
 
 void NotesScreen::hideEvent(QHideEvent* event) {

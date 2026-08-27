@@ -6,7 +6,6 @@
 //
 // Part of the partial-class split of LlmConfigSection.cpp.
 
-#include "auth/AuthManager.h"
 #include "core/logging/Logger.h"
 #include "screens/settings/LlmConfigSection.h"
 #include "services/llm/LlmService.h"
@@ -472,14 +471,12 @@ void LlmConfigSection::load_providers() {
     auto result = LlmConfigRepository::instance().list_providers();
     if (result.is_ok()) {
         for (const auto& p : result.value()) {
-            bool is_fincept = (p.provider.toLower() == "fincept");
             QString display = provider_display_name(p.provider);
             if (p.is_active) {
                 display += "  ✓";
                 active_provider = p.provider;
             }
-            // Show model tag only for non-fincept providers
-            if (!is_fincept && !p.model.isEmpty())
+            if (!p.model.isEmpty())
                 display += "  [" + p.model + "]";
             auto* item = new QListWidgetItem(display);
             item->setData(Qt::UserRole, p.provider);
@@ -528,7 +525,6 @@ void LlmConfigSection::load_providers() {
 void LlmConfigSection::populate_form(const QString& provider) {
     provider_edit_->setText(provider);
 
-    bool is_fincept = (provider.toLower() == "fincept");
     bool is_ollama = (provider.toLower() == "ollama");
 
     // Populate model combo with fallback suggestions (empty for ollama — see fallback_models).
@@ -560,25 +556,7 @@ void LlmConfigSection::populate_form(const QString& provider) {
             tools_check_->setChecked(p.tools_enabled);
             tools_check_->setVisible(true);
 
-            if (is_fincept) {
-                api_key_edit_->clear();
-                const QString stored = fincept::auth::AuthManager::instance().fincept_api_key();
-                if (!stored.isEmpty()) {
-                    // Show only the trailing 4 characters. The previous preview
-                    // printed the first 8, which for a prefixed key format gives
-                    // away a meaningful slice of the secret in a field that is
-                    // always visible (placeholders ignore Password echo mode).
-                    api_key_edit_->setPlaceholderText(
-                        tr("Linked to your Fincept account: ••••%1").arg(stored.right(4)));
-                } else {
-                    api_key_edit_->setPlaceholderText(tr("Login to your Fincept account to enable"));
-                }
-                api_key_edit_->setEnabled(false);
-                // Fincept is a managed service — hide model/base_url/fetch
-                model_combo_->setVisible(false);
-                fetch_btn_->setVisible(false);
-                base_url_edit_->setVisible(false);
-            } else if (is_ollama) {
+            if (is_ollama) {
                 // Local provider — no API key needed. Mark the field clearly so users
                 // don't think it's broken or required.
                 api_key_edit_->clear();
@@ -610,17 +588,8 @@ void LlmConfigSection::populate_form(const QString& provider) {
 
     // New provider — clear form
     api_key_edit_->clear();
-    api_key_edit_->setEnabled(!is_fincept && !is_ollama);
-    if (is_fincept) {
-        const QString stored = fincept::auth::AuthManager::instance().fincept_api_key();
-        if (!stored.isEmpty())
-            api_key_edit_->setPlaceholderText(tr("Linked to your Fincept account: ••••%1").arg(stored.right(4)));
-        else
-            api_key_edit_->setPlaceholderText(tr("Login to your Fincept account to enable"));
-        model_combo_->setVisible(false);
-        fetch_btn_->setVisible(false);
-        base_url_edit_->setVisible(false);
-    } else if (is_ollama) {
+    api_key_edit_->setEnabled(!is_ollama);
+    if (is_ollama) {
         api_key_edit_->setPlaceholderText(tr("Not required — local provider"));
         model_combo_->setVisible(true);
         model_combo_->setEnabled(true);
@@ -653,7 +622,7 @@ void LlmConfigSection::on_provider_selected(int row) {
     }
 
     QString provider = provider_list_->item(row)->data(Qt::UserRole).toString();
-    delete_btn_->setEnabled(provider.toLower() != "fincept");
+    delete_btn_->setEnabled(true);
     populate_form(provider);
 }
 
@@ -664,29 +633,20 @@ void LlmConfigSection::on_save_provider() {
         return;
     }
 
-    bool is_fincept = (provider == "fincept");
-
     LlmConfig cfg;
     cfg.provider = provider;
-    cfg.api_key = is_fincept ? QString() : api_key_edit_->text().trimmed();
+    cfg.api_key = api_key_edit_->text().trimmed();
     cfg.model = model_combo_->currentText().trimmed();
     cfg.base_url = base_url_edit_->text().trimmed();
     cfg.is_active = true;
     cfg.tools_enabled = tools_check_->isChecked();
 
-    // Fincept defaults — endpoints are hardcoded in LlmService, base_url not needed
-    if (is_fincept) {
-        if (cfg.model.isEmpty())
-            cfg.model = "MiniMax-M2.7";
-        cfg.base_url = {}; // not used for fincept
-    }
-
     // Basic validation
-    if (!is_fincept && provider != "ollama" && cfg.api_key.isEmpty()) {
+    if (provider != "ollama" && cfg.api_key.isEmpty()) {
         show_status(tr("API key is required for %1").arg(provider), true);
         return;
     }
-    if (!is_fincept && cfg.model.isEmpty()) {
+    if (cfg.model.isEmpty()) {
         show_status(tr("Model name is required"), true);
         return;
     }
@@ -733,11 +693,6 @@ void LlmConfigSection::on_delete_provider() {
 
     QString provider = provider_list_->item(row)->data(Qt::UserRole).toString();
 
-    if (provider.toLower() == "fincept") {
-        show_status(tr("Cannot remove built-in Fincept provider"), true);
-        return;
-    }
-
     auto reply = QMessageBox::question(this, tr("Delete Provider"), tr("Remove '%1' configuration?").arg(provider),
                                        QMessageBox::Yes | QMessageBox::No);
 
@@ -771,16 +726,6 @@ void LlmConfigSection::on_test_connection() {
     QString provider = provider_edit_->text().trimmed().toLower();
     if (provider.isEmpty()) {
         show_status(tr("Select a provider first"), true);
-        return;
-    }
-
-    if (provider == "fincept") {
-        // Fincept is a managed service — verify API key exists (session → SecureStorage)
-        const QString stored = fincept::auth::AuthManager::instance().fincept_api_key();
-        if (!stored.isEmpty())
-            show_status(tr("Fincept connected — API key active"), false);
-        else
-            show_status(tr("Not connected — login to your Fincept account first"), true);
         return;
     }
 
@@ -818,11 +763,6 @@ void LlmConfigSection::on_fetch_models() {
     QString provider = provider_edit_->text().trimmed().toLower();
     if (provider.isEmpty()) {
         show_status(tr("Select a provider first"), true);
-        return;
-    }
-
-    if (provider == "fincept") {
-        show_status(tr("Fincept manages models automatically"), false);
         return;
     }
 

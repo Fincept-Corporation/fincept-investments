@@ -12,7 +12,7 @@ namespace fincept::ui {
 
 class PushpinBar;
 
-/// Combined toolbar: File/Navigate/View/Help menus + branding + clock + user info + logout.
+/// Combined toolbar: File/Navigate/View/Help menus + branding + clock.
 /// Replaces both ToolBar and NavigationBar in a single row.
 ///
 /// Internationalised: all menus and labels flow through tr(). Menus are
@@ -23,18 +23,13 @@ class ToolBar : public QWidget {
   public:
     explicit ToolBar(QWidget* parent = nullptr);
 
-    void refresh_user_display();
-
     PushpinBar* pushpin_bar() const { return pushpin_bar_; }
 
   signals:
     void navigate_to(const QString& tab_id);
     void dock_command(const QString& action, const QString& primary, const QString& secondary);
     void action_triggered(const QString& action);
-    void logout_clicked();
-    void plan_clicked();
     void upgrade_clicked();
-    void chat_mode_toggled();
 
   protected:
     void resizeEvent(QResizeEvent* e) override;
@@ -46,17 +41,12 @@ class ToolBar : public QWidget {
   private:
     QMenuBar* menu_bar_ = nullptr;
     QLabel* clock_label_ = nullptr;
-    QLabel* user_label_ = nullptr;
-    QLabel* credits_label_ = nullptr;
     QLabel* subtitle_label_ = nullptr;
     QLabel* branding_label_ = nullptr;
     QLabel* live_dot_ = nullptr;
     QLabel* live_label_ = nullptr;
-    QPushButton* plan_btn_ = nullptr;
     /// Always-visible CTA for Fincept Terminal Enterprise (the private edition).
     QPushButton* upgrade_btn_ = nullptr;
-    QPushButton* chat_mode_btn_ = nullptr;
-    QPushButton* logout_btn_ = nullptr;
     QTimer* clock_timer_ = nullptr;
     QVector<QLabel*> separators_;
     QLabel* fincept_label_ = nullptr;

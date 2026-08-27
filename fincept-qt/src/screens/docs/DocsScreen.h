@@ -76,7 +76,6 @@ class DocsScreen : public QWidget {
 
     // AI & Quantitative
     QWidget* page_ai_quant_lab();
-    QWidget* page_quantlib();
     QWidget* page_ai_chat();
     QWidget* page_agent_config();
     QWidget* page_alpha_arena();
@@ -104,7 +103,6 @@ class DocsScreen : public QWidget {
 
     // Community
     QWidget* page_settings();
-    QWidget* page_profile();
 
     // ── Members ──────────────────────────────────────────────────────────────
     QSplitter* splitter_ = nullptr; // owns sidebar_ + pages_; reused on rebuild

@@ -23,12 +23,12 @@ namespace fincept::ai_chat {
 inline bool provider_supports_streaming(const QString& provider) {
     return provider == "openai" || provider == "anthropic" || provider == "gemini" || provider == "google" ||
            provider == "groq" || provider == "deepseek" || provider == "openrouter" || provider == "minimax" ||
-           provider == "kimi" || provider == "ollama" || provider == "xai" || provider == "fincept" ||
-           provider == "astraflow" || provider == "astraflow_cn" || provider == "aihubmix";
+           provider == "kimi" || provider == "ollama" || provider == "xai" || provider == "astraflow" ||
+           provider == "astraflow_cn" || provider == "aihubmix";
 }
 
 inline bool provider_requires_api_key(const QString& provider) {
-    return provider != "ollama" && provider != "fincept";
+    return provider != "ollama";
 }
 
 /// In-band sentinel prefixed onto a streamed chunk to mark it as chain-of-thought
@@ -172,8 +172,6 @@ class LlmService : public QObject {
     QJsonObject build_anthropic_request(const QString& user_message, const std::vector<ConversationMessage>& history,
                                         bool stream);
     QJsonObject build_gemini_request(const QString& user_message, const std::vector<ConversationMessage>& history);
-    QJsonObject build_fincept_request(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                      bool with_tools);
 
     // Provider-specific tool-array builders. Shared by the initial request
     // builders AND the multi-round tool loops so the tools advertised on
@@ -253,17 +251,6 @@ class LlmService : public QObject {
     /// QEventLoop-based path used for Cloudflare-protected Fincept endpoints.
     static HttpResult eventloop_request(const QString& method, const QString& url, const QByteArray& body,
                                         const QMap<QString, QString>& headers, int timeout_ms = 30000);
-
-    /// POST /research/llm/async then poll /research/llm/status/{id}. Runs a
-    /// multi-round tool loop — the endpoint takes a flat prompt, so each round's
-    /// assistant turn and tool results are appended to the prompt transcript.
-    LlmResponse fincept_async_request(const QString& user_message, const std::vector<ConversationMessage>& history);
-
-    /// One submit+poll cycle against /research/llm/async. Body is {prompt,
-    /// max_tokens} only — see the note in LlmFinceptAsync.cpp on why `tools` is
-    /// NOT sent. Structured tool_calls, if the backend ever returns any, land in
-    /// *out_tool_calls (may be null).
-    LlmResponse fincept_submit_poll(const QString& prompt, QJsonArray* out_tool_calls);
 };
 
 } // namespace fincept::ai_chat

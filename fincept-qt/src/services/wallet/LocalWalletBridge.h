@@ -30,7 +30,7 @@ namespace fincept::wallet {
 ///     is compared in constant time.
 ///   - Host + Sec-Fetch-* validation rejects DNS rebinding and cross-origin
 ///     subresource injection from any other page the user has open
-///     (auth/LoopbackGuard.h).
+///     (core/security/LoopbackGuard.h).
 ///   - Access-Control-Allow-Origin names our own loopback origin, never `*`.
 ///   - server self-destructs after success or timeout.
 ///   - never speaks HTTP/2, never serves anything besides the embedded connect

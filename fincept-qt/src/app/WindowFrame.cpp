@@ -3,10 +3,6 @@
 #include "app/DockScreenRouter.h"
 #include "app/MonitorPickerDialog.h"
 #include "app/TerminalShell.h"
-#include "auth/AuthManager.h"
-#include "auth/InactivityGuard.h"
-#include "auth/PinManager.h"
-#include "auth/lock/LockOverlayController.h"
 #include "core/actions/ActionRegistry.h"
 #include "core/actions/builtin_actions.h"
 #include "core/config/ProfileManager.h"
@@ -31,13 +27,7 @@
 #include "screens/alpha_arena/AlphaArenaScreen.h"
 #include "screens/alt_investments/AltInvestmentsScreen.h"
 #include "screens/asia_markets/AsiaMarketsScreen.h"
-#include "screens/auth/ForgotPasswordScreen.h"
-#include "screens/auth/LockScreen.h"
-#include "screens/auth/LoginScreen.h"
-#include "screens/auth/PricingScreen.h"
-#include "screens/auth/RegisterScreen.h"
 #include "screens/backtesting/BacktestingScreen.h"
-#include "screens/chat_mode/ChatModeScreen.h"
 #include "screens/code_editor/CodeEditorScreen.h"
 #include "screens/common/ComingSoonScreen.h"
 #include "screens/common/IStatefulScreen.h"
@@ -55,7 +45,6 @@
 #include "screens/excel/ExcelScreen.h"
 #include "screens/file_manager/FileManagerScreen.h"
 #include "screens/fno/FnoScreen.h"
-#include "screens/forum/ForumScreen.h"
 #include "screens/geopolitics/GeopoliticsScreen.h"
 #include "screens/gov_data/GovDataScreen.h"
 #include "screens/info/ContactScreen.h"
@@ -72,12 +61,9 @@
 #include "screens/notes/NotesScreen.h"
 #include "screens/polymarket/PolymarketScreen.h"
 #include "screens/portfolio/PortfolioScreen.h"
-#include "screens/profile/ProfileScreen.h"
-#include "screens/quantlib/QuantLibScreen.h"
 #include "screens/relationship_map/RelationshipMapScreen.h"
 #include "screens/report_builder/ReportBuilderScreen.h"
 #include "screens/settings/SettingsScreen.h"
-#include "screens/support/SupportScreen.h"
 #include "screens/surface_analytics/SurfaceAnalyticsScreen.h"
 #include "screens/trade_viz/TradeVizScreen.h"
 #include "screens/watchlist/WatchlistScreen.h"
@@ -92,7 +78,6 @@
 #include "ui/navigation/DockStatusBar.h"
 #include "ui/navigation/DockToolBar.h"
 #include "ui/navigation/FKeyBar.h"
-#include "ui/navigation/NavigationBar.h"
 #include "ui/navigation/StatusBar.h"
 #include "ui/navigation/ToolBar.h"
 #include "ui/pushpins/PushpinBar.h"
@@ -133,46 +118,6 @@
 namespace fincept {
 
 namespace {
-
-/// Binds a QTimer's run state to its host widget's visibility (§P3).
-///
-/// The rule is "start in showEvent, stop in hideEvent", but WindowFrame's header
-/// is shared with the multi-window shell and declares no show/hide overrides, so
-/// the same contract is enforced from an installed event filter instead. Minimise
-/// is covered too: on Windows a minimised top-level gets WindowStateChange, not
-/// Hide, and a minimised window has no reason to keep polling.
-class VisibilityTimerGate final : public QObject {
-  public:
-    VisibilityTimerGate(QTimer* timer, QObject* parent) : QObject(parent), timer_(timer) {}
-
-  protected:
-    bool eventFilter(QObject* watched, QEvent* event) override {
-        if (timer_) {
-            switch (event->type()) {
-                case QEvent::Show:
-                    timer_->start();
-                    break;
-                case QEvent::Hide:
-                    timer_->stop();
-                    break;
-                case QEvent::WindowStateChange:
-                    if (auto* w = qobject_cast<QWidget*>(watched)) {
-                        if (w->isMinimized())
-                            timer_->stop();
-                        else if (w->isVisible())
-                            timer_->start();
-                    }
-                    break;
-                default:
-                    break;
-            }
-        }
-        return QObject::eventFilter(watched, event);
-    }
-
-  private:
-    QPointer<QTimer> timer_;
-};
 
 } // namespace
 
@@ -315,63 +260,12 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
     if (always_on_top_)
         setWindowFlags(windowFlags() | Qt::WindowStaysOnTopHint);
 
-    // Bootstrap pin_gate_cleared_ from the process-wide locked flag. Without
-    // this, opening a second WindowFrame (--new-window IPC) while the user is
-    // already PIN-unlocked would treat the new window as un-gated and force
-    // a redundant PIN re-entry. The singleton flag is the source of truth for
-    // "user has cleared the PIN gate this session"; the per-window field is
-    // a cache so on_auth_state_changed() can skip re-prompting.
-    pin_gate_cleared_ = !auth::InactivityGuard::instance().is_terminal_locked() &&
-                        auth::AuthManager::instance().is_authenticated() && auth::PinManager::instance().has_pin();
-
-    auto* master_stack = new QStackedWidget;
-
-    // ── Auth stack ───────────────────────────────────────────────────────────
-    auth_stack_ = new QStackedWidget;
-    setup_auth_screens();
-    master_stack->addWidget(auth_stack_);
-
-    // ── Chat Mode ─────────────────────────────────────────────────────────────
-    chat_mode_screen_ = new chat_mode::ChatModeScreen;
-
-    // ── Lock Screen ─────────────────────────────────────────────────────────
-    // Phase 1c lift: LockOverlayController owns LockScreen widgets. The
-    // frame asks for its widget via the controller; master_stack reparents
-    // it via addWidget() below. WindowFrame keeps a non-owning pointer for
-    // the existing apply_lock_state / show_unlock / show_setup paths that
-    // already exist (preserving security-audit invariants — see
-    // auth/lock/LockOverlayController.h).
-    lock_screen_ = auth::LockOverlayController::instance().lock_screen_for(this);
-
     // ── ADS Docking mode ─────────────────────────────────────────────────────
+    // The dock wrapper is the one and only central widget. There is no auth /
+    // chat-mode / lock overlay to switch between any more, so the frame skips
+    // the QStackedWidget indirection entirely.
     setup_docking_mode();
-    master_stack->addWidget(dock_manager_->parentWidget()); // index 1 — dock_wrapper
-    master_stack->addWidget(chat_mode_screen_);             // index 2
-    master_stack->addWidget(lock_screen_);                  // index 3 — lock/PIN screen
-    connect(chat_mode_screen_, &chat_mode::ChatModeScreen::exit_requested, this, &WindowFrame::toggle_chat_mode);
-
-    // Lock screen signals
-    connect(lock_screen_, &screens::LockScreen::unlocked, this, &WindowFrame::on_terminal_unlocked);
-    connect(lock_screen_, &screens::LockScreen::reauth_requested, this, []() {
-        // Max PIN attempts exceeded — wipe the PIN (this is the ONLY path
-        // that should clear it) and force a full re-login so the server
-        // re-validates the user before they can configure a new PIN.
-        auth::PinManager::instance().clear_pin();
-        auth::AuthManager::instance().logout();
-    });
-
-    // Inactivity guard → lock screen. The originator window handles
-    // lock_requested by flipping the process-wide locked flag; the
-    // terminal_locked_changed signal then drives every WindowFrame
-    // (including this one, idempotently) to apply the lock UI. Without
-    // this lock-step, a secondary window would keep showing live data
-    // behind the back of the lock screen on the primary.
-    connect(&auth::InactivityGuard::instance(), &auth::InactivityGuard::lock_requested, this,
-            &WindowFrame::show_lock_screen);
-    connect(&auth::InactivityGuard::instance(), &auth::InactivityGuard::terminal_locked_changed, this,
-            &WindowFrame::apply_lock_state);
-
-    setCentralWidget(master_stack);
+    setCentralWidget(dock_manager_->parentWidget());
 
     dock_toolbar_ = new ui::DockToolBar(this);
     addToolBar(Qt::TopToolBarArea, dock_toolbar_);
@@ -384,7 +278,6 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
     dock_status_bar_ = new ui::DockStatusBar(this);
     setStatusBar(dock_status_bar_);
 
-    stack_ = master_stack;
     auto* toolbar = dock_toolbar_->inner();
 
     // ── Window registry wiring ──────────────────────────────────────────────
@@ -401,10 +294,8 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
     // Tab bar navigation: open the selected screen exclusively — closes all other
     // panels and fills the full area. Each tab is a fresh independent screen,
     // not nested into whatever was previously open.
-    connect(tab_bar_, &ui::TabBar::tab_changed, this, [this](const QString& id) {
-        if (!locked_)
-            dock_router_->navigate(id, true);
-    });
+    connect(tab_bar_, &ui::TabBar::tab_changed, this,
+            [this](const QString& id) { dock_router_->navigate(id, true); });
     connect(dock_router_, &DockScreenRouter::screen_changed, tab_bar_, &ui::TabBar::set_active);
 
     // Update the main window title bar to reflect the current screen name.
@@ -440,11 +331,8 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
         }
     });
 
-    connect(toolbar, &ui::ToolBar::chat_mode_toggled, this, &WindowFrame::toggle_chat_mode);
-    connect(toolbar, &ui::ToolBar::navigate_to, this, [this](const QString& id) {
-        if (!locked_)
-            dock_router_->navigate(id, true);
-    });
+    connect(toolbar, &ui::ToolBar::navigate_to, this,
+            [this](const QString& id) { dock_router_->navigate(id, true); });
 
     // Debounced dock-layout save: ADS emits a burst of signals during
     // add/replace/remove; coalesce into one write ~500 ms after the last change
@@ -472,8 +360,6 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
 
     connect(toolbar, &ui::ToolBar::dock_command, this,
             [this](const QString& action, const QString& primary, const QString& secondary) {
-                if (locked_)
-                    return;
                 if (action == "add")
                     dock_router_->add_alongside(primary, secondary);
                 else if (action == "remove")
@@ -492,10 +378,7 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
         if (!screen_id.isEmpty())
             QMetaObject::invokeMethod(
                 dock_router_,
-                [this, screen_id, exclusive]() {
-                    if (!locked_)
-                        dock_router_->navigate(screen_id, exclusive);
-                },
+                [this, screen_id, exclusive]() { dock_router_->navigate(screen_id, exclusive); },
                 Qt::QueuedConnection);
     });
 
@@ -514,7 +397,7 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
         QMetaObject::invokeMethod(
             this,
             [this, symbol, exchange, match_exchanges, is_buy, price]() {
-                if (locked_ || !dock_router_)
+                if (!dock_router_)
                     return;
                 const QString id = QStringLiteral("equity_trading");
                 if (!dock_router_->screen_widget(id))
@@ -536,7 +419,7 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
     //
     // The captured-`this` form had a latent bug in multi-window setups: an
     // action triggered from frame B would still execute against frame A's
-    // state (locked_, focus_mode_, etc.) because `this` was fixed at bind
+    // state (focus_mode_, etc.) because `this` was fixed at bind
     // time. The registry resolves the focused frame live at invoke time.
     auto& km = KeyConfigManager::instance();
     auto& reg = ActionRegistry::instance();
@@ -552,10 +435,8 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
         auto* act = km.action(a);
         if (!act)
             continue;
-        // LockNow runs even when this frame isn't focused (e.g. user pressed
-        // it from a dialog) — it's a global "secure my session" command.
-        // Everything else is window-scoped so only the focused frame fires.
-        act->setShortcutContext(a == KeyAction::LockNow ? Qt::ApplicationShortcut : Qt::WindowShortcut);
+        // Window-scoped so only the focused frame fires.
+        act->setShortcutContext(Qt::WindowShortcut);
         addAction(act);
         connect(act, &QAction::triggered, this, [action_id]() {
             // Build a fresh context every invocation so the focused frame
@@ -576,8 +457,6 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
 
     // Toolbar actions
     connect(toolbar, &ui::ToolBar::action_triggered, this, [this](const QString& action) {
-        if (locked_)
-            return;
         if (action == "browse_components") {
             // Same path as the keyboard shortcut so the behavior stays in one
             // place — the KeyConfigManager action will be triggered directly.
@@ -686,7 +565,7 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
                 // Geopolitics
                 {"perspective_geopolitics", {"geopolitics", "maritime", "relationship_map", "news"}},
                 // AI & Quant
-                {"perspective_quant", {"ai_quant_lab", "quantlib", "backtesting", "markets"}},
+                {"perspective_quant", {"ai_quant_lab", "backtesting", "markets"}},
                 {"perspective_ai", {"ai_chat", "agent_config"}},
                 // Tools
                 {"perspective_tools", {"code_editor", "node_editor"}},
@@ -701,17 +580,12 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
                 }
                 LOG_INFO("WindowFrame", QString("Quick Switch: %1 (%2 panels)").arg(action).arg(screens.size()));
             }
-        } else if (action == "logout") {
-            auth::AuthManager::instance().logout();
         } else if (action == "fullscreen") {
             if (isFullScreen())
                 showNormal();
             else
                 showFullScreen();
         } else if (action == "focus_mode") {
-            // Auth screens must never reveal the shell via focus-mode toggle.
-            if (stack_ && stack_->currentIndex() == 0)
-                return;
             focus_mode_ = !focus_mode_;
             if (dock_toolbar_)
                 dock_toolbar_->setVisible(!focus_mode_);
@@ -812,39 +686,23 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
         }
     });
 
-    // Toolbar logout
-    connect(toolbar, &ui::ToolBar::logout_clicked, this, []() { auth::AuthManager::instance().logout(); });
-
-    // Toolbar plan label → pricing screen
-    connect(toolbar, &ui::ToolBar::plan_clicked, this, [this]() {
-        set_shell_visible(false);
-        stack_->setCurrentIndex(0);
-        auth_stack_->setCurrentIndex(3); // PricingScreen
-    });
-
     // Toolbar UPGRADE → Enterprise (the private edition) promo dialog.
     connect(toolbar, &ui::ToolBar::upgrade_clicked, this, [this]() { ui::UpgradeDialog::show_now(this); });
-
-    // Auth state
-    connect(&auth::AuthManager::instance(), &auth::AuthManager::auth_state_changed, this,
-            &WindowFrame::on_auth_state_changed);
-    connect(&auth::AuthManager::instance(), &auth::AuthManager::logged_out, this, &WindowFrame::on_auth_state_changed);
 
     // Restore window state (maximised, toolbar positions, etc.)
     // Note: restoreState() also restores QToolBar visibility, which can
     // hide the toolbar from stale/corrupt saved state. We force it visible
-    // afterward unless the user is intentionally in focus/chat mode.
+    // afterward unless the user is intentionally in focus mode.
     const QByteArray saved_state = SessionManager::instance().load_state(window_id_);
     if (!saved_state.isEmpty())
         restoreState(saved_state);
 
-    // Toolbar/status bar visibility is controlled by set_shell_visible() based on
-    // auth state. Start hidden — on_auth_state_changed() will show them if the user
-    // is already authenticated and lands on the app stack.
+    // The shell is always visible now (no auth/lock overlay to hide it);
+    // focus mode is the only thing that hides the chrome.
     if (dock_toolbar_)
-        dock_toolbar_->setVisible(false);
+        dock_toolbar_->setVisible(!focus_mode_);
     if (dock_status_bar_)
-        dock_status_bar_->setVisible(false);
+        dock_status_bar_->setVisible(!focus_mode_);
 
     // Restore ADS dock layout — must happen after all screens are registered
     // but BEFORE the initial navigate, so we don't create a widget that
@@ -912,173 +770,86 @@ WindowFrame::WindowFrame(int window_id, QWidget* parent, const WindowId& adopted
         SessionManager::instance().set_dock_layout_version(window_id_, kDockLayoutVersion);
     }
 
-    // Show the app or auth stack based on authentication state.
-    // If dock layout was restored, the saved tabs are already visible.
-    // Otherwise, navigate to dashboard as default.
-    auto& auth_mgr = auth::AuthManager::instance();
-    if (auth_mgr.is_authenticated() || auth_mgr.is_loading()) {
-        // If user is authenticated and has a PIN, show lock screen first —
-        // UNLESS this is an additional window opened while an existing
-        // window has already cleared the PIN gate this session.
-        // pin_gate_cleared_ was bootstrapped above from the process-wide
-        // InactivityGuard flag (which is the single source of truth for
-        // "is the terminal locked?"); skipping the prompt here just
-        // mirrors the unlocked state into the new frame.
-        if (auth_mgr.is_authenticated() && auth::PinManager::instance().has_pin() && !pin_gate_cleared_) {
-            LOG_INFO("WindowFrame", "Session restored — showing PIN unlock");
-            lock_screen_->show_unlock();
-            locked_ = true;
-            set_shell_visible(false);
-            stack_->setCurrentIndex(3);
-        } else if (auth_mgr.is_authenticated() && auth::PinManager::instance().has_pin()) {
-            LOG_INFO("WindowFrame", "Session already unlocked — skipping PIN prompt for additional window");
-            set_shell_visible(true);
-            stack_->setCurrentIndex(1);
-        } else if (auth_mgr.is_authenticated()) {
-            // Authenticated but no PIN yet — will be caught by on_auth_state_changed
-            on_auth_state_changed();
-        } else {
-            // Still loading — show app stack temporarily (loading state)
-            set_shell_visible(true);
-            stack_->setCurrentIndex(1);
-        }
-        // Recovery / "Continue from last session" path: WorkspaceShell::apply
-        // spawns this frame with a non-null adopted_uuid and will call
-        // apply_layout(fl) immediately after construction returns. Skip the
-        // default dashboard navigate so we don't (a) leave a stray dashboard
-        // dock widget for ADS restoreState to flag-as-unassigned, and
-        // (b) pay the cost of constructing DashboardScreen just to discard it.
-        // If apply_layout subsequently fails, the caller is responsible for
-        // falling back to a default screen.
-        if (!dock_restored && adopted_uuid.is_null()) {
-            // Defer navigation so the window can paint its chrome (toolbar,
-            // tab bar, status bar) before the first screen factory runs.
-            // DashboardScreen construction can take 200-500ms; without this
-            // the user sees a blank frame for that entire duration.
-            QTimer::singleShot(0, this, [this]() { dock_router_->navigate("dashboard"); });
-            LOG_INFO("WindowFrame", "Deferred default dashboard navigate to after first paint");
-        } else if (!dock_restored) {
-            LOG_INFO("WindowFrame", QString("Deferring default navigate — frame spawned with adopted uuid %1 "
-                                            "(apply_layout will populate)")
-                                        .arg(adopted_uuid.to_string()));
-        } else {
-            // Dock layout restored — tabs are positioned but screens are
-            // still placeholders (materialize was suppressed above). Defer
-            // construction: materialize the active panel first so the user
-            // sees content quickly, then fill in remaining visible panels.
-            const QString last = SessionManager::instance().last_screen(window_id_);
-            QTimer::singleShot(0, this, [this, last]() {
-                if (!dock_router_ || !dock_manager_)
-                    return;
-                // Active panel first — user sees populated content immediately
-                if (!last.isEmpty()) {
-                    dock_router_->materialize_now(last);
-                    if (auto* dw = dock_router_->find_dock_widget(last)) {
-                        if (!dw->isClosed()) {
-                            dw->raise();
-                            dw->setAsCurrentTab();
-                        }
-                    }
-                    tab_bar_->set_active(last);
-                }
-
-                // Remaining visible panels — ONE PER EVENT-LOOP TURN. Doing the
-                // whole loop in a single tick re-froze the window the instant
-                // the first panel painted: a 4-panel layout constructed three
-                // heavy screens back to back with no chance to repaint between
-                // them. Snapshot the ids first so the walk is stable while the
-                // dock map changes underneath it.
-                QStringList pending;
-                for (const auto& entry : dock_manager_->dockWidgetsMap().toStdMap()) {
-                    if (entry.first == last)
-                        continue;
-                    if (entry.second && !entry.second->isClosed())
-                        pending << entry.first;
-                }
-                if (pending.isEmpty())
-                    return;
-
-                // Copyable, self-rescheduling functor: materialise the head,
-                // then post itself again with the tail. QPointer + the `frame`
-                // context object mean a closed window simply drops the rest.
-                struct MaterialiseWalk {
-                    QPointer<WindowFrame> frame;
-                    QStringList todo;
-                    void operator()() const {
-                        if (!frame || todo.isEmpty())
-                            return;
-                        auto* router = frame->dock_router();
-                        if (!router)
-                            return;
-                        // The user may have closed this panel on an earlier tick.
-                        if (auto* dw = router->find_dock_widget(todo.front()); dw && !dw->isClosed())
-                            router->materialize_now(todo.front());
-                        const QStringList rest = todo.mid(1);
-                        if (!rest.isEmpty())
-                            QTimer::singleShot(0, frame.data(), MaterialiseWalk{frame, rest});
-                    }
-                };
-                QTimer::singleShot(0, this, MaterialiseWalk{this, pending});
-            });
-        }
+    // Recovery / "Continue from last session" path: WorkspaceShell::apply
+    // spawns this frame with a non-null adopted_uuid and will call
+    // apply_layout(fl) immediately after construction returns. Skip the
+    // default dashboard navigate so we don't (a) leave a stray dashboard
+    // dock widget for ADS restoreState to flag-as-unassigned, and
+    // (b) pay the cost of constructing DashboardScreen just to discard it.
+    // If apply_layout subsequently fails, the caller is responsible for
+    // falling back to a default screen.
+    if (!dock_restored && adopted_uuid.is_null()) {
+        // Defer navigation so the window can paint its chrome (toolbar,
+        // tab bar, status bar) before the first screen factory runs.
+        // DashboardScreen construction can take 200-500ms; without this
+        // the user sees a blank frame for that entire duration.
+        QTimer::singleShot(0, this, [this]() { dock_router_->navigate("dashboard"); });
+        LOG_INFO("WindowFrame", "Deferred default dashboard navigate to after first paint");
+    } else if (!dock_restored) {
+        LOG_INFO("WindowFrame", QString("Deferring default navigate — frame spawned with adopted uuid %1 "
+                                        "(apply_layout will populate)")
+                                    .arg(adopted_uuid.to_string()));
     } else {
-        on_auth_state_changed();
+        // Dock layout restored — tabs are positioned but screens are
+        // still placeholders (materialize was suppressed above). Defer
+        // construction: materialize the active panel first so the user
+        // sees content quickly, then fill in remaining visible panels.
+        const QString last = SessionManager::instance().last_screen(window_id_);
+        QTimer::singleShot(0, this, [this, last]() {
+            if (!dock_router_ || !dock_manager_)
+                return;
+            // Active panel first — user sees populated content immediately
+            if (!last.isEmpty()) {
+                dock_router_->materialize_now(last);
+                if (auto* dw = dock_router_->find_dock_widget(last)) {
+                    if (!dw->isClosed()) {
+                        dw->raise();
+                        dw->setAsCurrentTab();
+                    }
+                }
+                tab_bar_->set_active(last);
+            }
+
+            // Remaining visible panels — ONE PER EVENT-LOOP TURN. Doing the
+            // whole loop in a single tick re-froze the window the instant
+            // the first panel painted: a 4-panel layout constructed three
+            // heavy screens back to back with no chance to repaint between
+            // them. Snapshot the ids first so the walk is stable while the
+            // dock map changes underneath it.
+            QStringList pending;
+            for (const auto& entry : dock_manager_->dockWidgetsMap().toStdMap()) {
+                if (entry.first == last)
+                    continue;
+                if (entry.second && !entry.second->isClosed())
+                    pending << entry.first;
+            }
+            if (pending.isEmpty())
+                return;
+
+            // Copyable, self-rescheduling functor: materialise the head,
+            // then post itself again with the tail. QPointer + the `frame`
+            // context object mean a closed window simply drops the rest.
+            struct MaterialiseWalk {
+                QPointer<WindowFrame> frame;
+                QStringList todo;
+                void operator()() const {
+                    if (!frame || todo.isEmpty())
+                        return;
+                    auto* router = frame->dock_router();
+                    if (!router)
+                        return;
+                    // The user may have closed this panel on an earlier tick.
+                    if (auto* dw = router->find_dock_widget(todo.front()); dw && !dw->isClosed())
+                        router->materialize_now(todo.front());
+                    const QStringList rest = todo.mid(1);
+                    if (!rest.isEmpty())
+                        QTimer::singleShot(0, frame.data(), MaterialiseWalk{frame, rest});
+                }
+            };
+            QTimer::singleShot(0, this, MaterialiseWalk{this, pending});
+        });
     }
 
-    // Periodic refresh of user credits/plan (every 3 minutes). Skip while
-    // the terminal is locked — we shouldn't be making authenticated API
-    // calls behind the back of the PIN gate, and the user can't see the
-    // refreshed data anyway.
-    user_refresh_timer_ = new QTimer(this);
-    user_refresh_timer_->setInterval(3 * 60 * 1000);
-    connect(user_refresh_timer_, &QTimer::timeout, this, []() {
-        auto& auth = auth::AuthManager::instance();
-        if (!auth.is_authenticated())
-            return;
-        if (auth::InactivityGuard::instance().is_terminal_locked())
-            return;
-        auth.refresh_user_data();
-    });
-    // §P3: no timer->start() in a constructor. Starting it here made every
-    // window fire an authenticated network refresh every 3 minutes for the
-    // whole process lifetime — including windows that were minimised or never
-    // shown. WindowFrame's header is shared with the multi-window shell, so
-    // rather than add showEvent/hideEvent overrides to it we gate the timer
-    // with an event filter that owns exactly the same lifecycle (and also
-    // covers minimise, which sends WindowStateChange rather than Hide).
-    installEventFilter(new VisibilityTimerGate(user_refresh_timer_, this));
-
-    // Confetti overlay (parented to central widget so it covers the whole app)
-    // Refresh user data when app regains focus (updates toolbar credits/plan)
-    connect(qApp, &QApplication::applicationStateChanged, this, [](Qt::ApplicationState state) {
-        if (state == Qt::ApplicationActive) {
-            auto& auth = auth::AuthManager::instance();
-            // Skip refresh while locked — same reason as the periodic
-            // timer above. check_for_resume_lock() below still runs so
-            // a wall-clock-elapsed lock fires immediately on wake.
-            if (auth.is_authenticated() && !auth::InactivityGuard::instance().is_terminal_locked())
-                auth.refresh_user_data();
-            // Resume-from-sleep lock: QTimer pauses during OS suspend, so a
-            // 5-minute timer can carry 4:59 of remaining time across a
-            // 30-minute nap. Ask the guard to check wall-clock delta and
-            // force a lock if the user was effectively idle for the full
-            // timeout. No-op when the guard is disabled or already locked.
-            auth::InactivityGuard::instance().check_for_resume_lock();
-        }
-    });
-}
-
-void WindowFrame::set_shell_visible(bool visible) {
-    if (dock_toolbar_)
-        dock_toolbar_->setVisible(visible && !focus_mode_ && !chat_mode_);
-    if (dock_status_bar_)
-        dock_status_bar_->setVisible(visible && !focus_mode_ && !chat_mode_);
-    if (!visible) {
-        // Reset title to plain app name — no screen suffix while on auth screens
-        const QString profile = ProfileManager::instance().active();
-        setWindowTitle(profile == "default" ? QStringLiteral("Fincept Terminal")
-                                            : QStringLiteral("Fincept Terminal [%1]").arg(profile));
-    }
 }
 
 void WindowFrame::update_window_title() {
@@ -1090,22 +861,16 @@ void WindowFrame::update_window_title() {
     if (profile != "default")
         title += QStringLiteral(" [%1]").arg(profile);
 
-    // Workspace / screen name must never appear in the title while the user
-    // is on the auth or lock stack — that would leak the last-visited screen
-    // to an unauthenticated viewer.
-    const bool shell_visible = stack_ && stack_->currentIndex() == 1;
-    if (shell_visible) {
-        // Layout name set by WorkspaceShell::apply on every successful
-        // layout switch / cold-boot restore. Empty until first apply.
-        const QString ws = layout::WorkspaceShell::current_name();
-        if (!ws.isEmpty())
-            title += QString(" — %1").arg(ws);
+    // Layout name set by WorkspaceShell::apply on every successful
+    // layout switch / cold-boot restore. Empty until first apply.
+    const QString ws = layout::WorkspaceShell::current_name();
+    if (!ws.isEmpty())
+        title += QString(" — %1").arg(ws);
 
-        if (dock_router_) {
-            const QString id = dock_router_->current_screen_id();
-            if (!id.isEmpty())
-                title += QString(" — %1").arg(DockScreenRouter::title_for_id(id));
-        }
+    if (dock_router_) {
+        const QString id = dock_router_->current_screen_id();
+        if (!id.isEmpty())
+            title += QString(" — %1").arg(DockScreenRouter::title_for_id(id));
     }
 
     setWindowTitle(title);
@@ -1331,33 +1096,6 @@ void WindowFrame::changeEvent(QEvent* event) {
             emit active_for_work_changed(now_active);
         }
     }
-
-    if (!(windowState() & Qt::WindowMinimized))
-        return;
-    // Only lock if the user opted in and we are actually in an authenticated
-    // session with a configured PIN — otherwise there is nothing to lock.
-    auto& auth = auth::AuthManager::instance();
-    if (!auth.is_authenticated() || !auth::PinManager::instance().has_pin())
-        return;
-    auto r = SettingsRepository::instance().get("security.lock_on_minimize");
-    const bool lock_on_min = r.is_ok() && r.value() == "true";
-    if (!lock_on_min)
-        return;
-
-    // Multi-window correctness (decision 8.8): minimising one window in a
-    // multi-window setup is normal user behaviour, not a "walked away from
-    // desk" event. Only trigger the lock when EVERY frame is minimised.
-    //
-    // Qt fires WindowStateChange before the frame is actually marked as
-    // minimised in some platform queues, so re-check via WindowRegistry
-    // *after* the next event-loop tick — at that point all minimisations
-    // queued together (Win+M, "Show desktop") have been applied. The 200ms
-    // delay also rides through transient lid-close/wake cycles where
-    // Qt sees a minimise then immediately a restore.
-    QTimer::singleShot(200, &auth::InactivityGuard::instance(), []() {
-        if (WindowRegistry::instance().all_minimised())
-            auth::InactivityGuard::instance().trigger_manual_lock();
-    });
 }
 
 } // namespace fincept

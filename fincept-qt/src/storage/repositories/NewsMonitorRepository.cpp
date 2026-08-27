@@ -1,6 +1,5 @@
 #include "storage/repositories/NewsMonitorRepository.h"
 
-#include "storage/sync/SyncOutbox.h"
 
 namespace fincept {
 
@@ -24,23 +23,17 @@ Result<void> NewsMonitorRepository::upsert(const NewsMonitorRow& m) {
     auto r = exec_write("INSERT OR REPLACE INTO news_monitors (id, label, keywords, color, enabled, updated_at) "
                         "VALUES (?, ?, ?, ?, ?, datetime('now'))",
                         {m.id, m.label, m.keywords.join(","), m.color, m.enabled ? 1 : 0});
-    if (r.is_ok())
-        SyncOutbox::record_unique("news_monitor", m.id, "upsert");
     return r;
 }
 
 Result<void> NewsMonitorRepository::remove(const QString& id) {
     auto r = exec_write("DELETE FROM news_monitors WHERE id = ?", {id});
-    if (r.is_ok())
-        SyncOutbox::record("news_monitor", id, "delete");
     return r;
 }
 
 Result<void> NewsMonitorRepository::set_enabled(const QString& id, bool enabled) {
     auto r = exec_write("UPDATE news_monitors SET enabled = ?, updated_at = datetime('now') WHERE id = ?",
                         {enabled ? 1 : 0, id});
-    if (r.is_ok())
-        SyncOutbox::record_unique("news_monitor", id, "toggle");
     return r;
 }
 

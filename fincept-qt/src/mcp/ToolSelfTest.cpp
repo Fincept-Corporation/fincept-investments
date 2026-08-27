@@ -134,8 +134,6 @@ std::vector<EvalCase> corpus() {
         {"change an application setting", {"set_setting"}},
 
         // ── profile / account ──
-        {"how many credits do I have left", {"profile_get_credits"}},
-        {"what subscription tier am I on", {"profile_get_subscription"}},
 
         // ── workspace ──
         {"tile my open panels in a 2x2 grid", {"tile_panels_2x2"}},

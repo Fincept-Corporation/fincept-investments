@@ -7,11 +7,8 @@
 #include "app/ScreenSmokeTest.h"
 #include "app/TerminalShell.h"
 #include "app/WindowFrame.h"
-#include "auth/AuthManager.h"
-#include "auth/InactivityGuard.h"
-#include "auth/PinManager.h"
-#include "auth/SessionGuard.h"
 #include "core/components/ComponentCatalog.h"
+#include "core/layout/WorkspaceShell.h"
 #include "core/config/AppConfig.h"
 #include "core/config/AppPaths.h"
 #include "core/config/ProfileManager.h"
@@ -44,23 +41,10 @@
 #include "services/alpha_arena/ArenaSelftest.h"
 #include "services/billing/FeeDiscountService.h"
 #include "services/billing/TierService.h"
-#include "services/cloud/AgentConfigCloudAdapter.h"
-#include "services/cloud/CloudSyncEngine.h"
-#include "services/cloud/DashboardCloudAdapter.h"
-#include "services/cloud/NewsFeedCloudAdapter.h"
-#include "services/cloud/NewsMonitorCloudAdapter.h"
-#include "services/cloud/NotebookCloudAdapter.h"
-#include "services/cloud/NotesCloudAdapter.h"
-#include "services/cloud/PortfolioCloudAdapter.h"
-#include "services/cloud/ReportCloudAdapter.h"
-#include "services/cloud/SettingsCloudAdapter.h"
-#include "services/cloud/WatchlistCloudAdapter.h"
-#include "services/cloud/WorkflowCloudAdapter.h"
 #include "services/dbnomics/DBnomicsService.h"
 #include "services/economics/EconomicsService.h"
 #include "services/economics/MacroCalendarService.h"
 #include "services/feeds/FeedSelfTest.h"
-#include "services/forum/ForumService.h"
 #include "services/geopolitics/GeopoliticsService.h"
 #include "services/gov_data/GovDataService.h"
 #include "services/llm/LlmService.h"
@@ -81,6 +65,7 @@
 #include "services/prediction/polymarket/PolymarketAdapter.h"
 #include "services/relationship_map/RelationshipMapService.h"
 #include "services/report_builder/ReportBuilderService.h"
+#include "services/updater/UpdateService.h"
 #include "services/wallet/BuybackBurnService.h"
 #include "services/wallet/RealYieldService.h"
 #include "services/wallet/StakingService.h"
@@ -103,6 +88,8 @@
 #include "trading/PaperMarkService.h"
 #include "trading/PaperTradingSelftest.h"
 #include "trading/UnifiedPortfolioService.h"
+#include "trading/instruments/InstrumentService.h"
+#include "trading/instruments/SymbolResolver.h"
 #include "trading/replication/PortfolioReplicationSelftest.h"
 #include "ui/notifications/DesktopNotifier.h"
 #include "ui/tables/LiveTableSelftest.h"
@@ -150,6 +137,39 @@ static void post_chain(std::vector<std::function<void()>> steps, std::size_t i =
         steps[i]();
         post_chain(std::move(steps), i + 1);
     });
+}
+
+// Work that used to run inside WindowFrame's auth callbacks (on_auth_state_changed
+// once a paid plan was confirmed, and again after the PIN unlock). With no auth
+// gate left there is no callback to hang it on, so it runs here — right after the
+// primary frame is shown, the same position in the boot sequence it always held.
+//
+// It lives in main() rather than the WindowFrame constructor because
+// WorkspaceShell::load_last_or_default() is process-global: it spawns and applies
+// frames, so calling it per-frame would recurse. `recovered` skips the restore when
+// CrashRecoveryDialog has already rebuilt the frames from a snapshot.
+static void start_post_boot_work(fincept::WindowFrame* primary, bool recovered) {
+    if (!primary)
+        return;
+    if (!recovered)
+        fincept::layout::WorkspaceShell::load_last_or_default();
+
+    // Silent update check, delayed so the UI settles first. UpdateService
+    // de-dupes silent checks across the session.
+    QPointer<fincept::WindowFrame> target = primary;
+    QTimer::singleShot(3000, primary, [target]() {
+        fincept::services::UpdateService::instance().set_dialog_parent(target.data());
+        fincept::services::UpdateService::instance().check_for_updates(true);
+    });
+
+    // Warm the instrument cache in the background — only loads what isn't
+    // already cached. Every registered broker is warmed so unified cross-broker
+    // search sees any master that was already downloaded. InstrumentService::
+    // instance() also registers the broker sources, so registered_brokers() is
+    // populated by the time the loop runs.
+    auto& isvc = fincept::trading::InstrumentService::instance();
+    for (const QString& bid : fincept::trading::SymbolResolver::instance().registered_brokers())
+        isvc.load_from_db_async(bid);
 }
 
 // Wire the two app-level lifecycle handlers that fire after the primary
@@ -415,8 +435,8 @@ int main(int argc, char* argv[]) {
     fincept::wallet::TokenMetadataService::instance().load_from_storage();
 
     // ── Pre-warm the dashboard topics ────────────────────────────────────────
-    // The user spends real time on the login / setup / recovery flow before
-    // the dashboard ever paints. Kick the hub now so producers start fetching
+    // The setup / crash-recovery flow, and the frame construction itself, run
+    // before the dashboard ever paints. Kick the hub now so producers fetch
     // immediately; by the time the dashboard widgets subscribe in showEvent,
     // peek() returns a fresh value and deliver_initial_value() paints it on
     // the first frame instead of showing the loading overlay.
@@ -459,7 +479,7 @@ int main(int argc, char* argv[]) {
         // fetch isn't gated by an unrelated test refresh; producer rate
         // limits still apply at dispatch (DataHub::flush_coalesced_requests).
         hub.request(topics, /*force=*/true);
-        LOG_INFO("App", QString("Pre-warmed %1 dashboard topics during login screen").arg(topics.size()));
+        LOG_INFO("App", QString("Pre-warmed %1 dashboard topics").arg(topics.size()));
     });
 
     // ── Deferred service init — fires after first window paint ───────────────
@@ -470,13 +490,13 @@ int main(int argc, char* argv[]) {
     // safe: the hub's scheduler tick picks up matching subscriptions on the
     // next pass once the producer is registered.
     //
-    // Split into three groups run one per event-loop turn (post_chain above).
+    // Split into groups run one per event-loop turn (post_chain above).
     // As a single lambda this was ~180 lines of uninterruptible main-thread
     // work — 20 hub registrations, prediction-adapter construction with
-    // SecureStorage credential loads, 12 cloud adapters plus a network
-    // refresh_all(), 15 policy patterns, wallet restore, and a live broker
-    // ping sweep — and the window stayed frozen for all of it. Order WITHIN a
-    // group is preserved; the groups only touch their own singletons.
+    // SecureStorage credential loads, 15 policy patterns, wallet restore, and
+    // a live broker ping sweep — and the window stayed frozen for all of it.
+    // Order WITHIN a group is preserved; the groups only touch their own
+    // singletons.
 
     // ── Group 1: DataHub producer registrations ─────────────────────────────
     auto init_hub_producers = []() {
@@ -534,38 +554,7 @@ int main(int argc, char* argv[]) {
         fincept::algo::AlgoEngineProducer::instance().ensure_registered_with_hub();
     };
 
-    // ── Group 2: Fincept Cloud sync ─────────────────────────────────────────
-    auto init_cloud_sync = []() {
-        // Drains the durable outbox (push) + pulls cloud→local. NOT a DataHub
-        // producer; reads stay on the local repo cache. Every adapter must be
-        // registered before initialize(), which is why they share one group.
-        // See fincept-qt/CLOUD_SYNC_PLAN.md.
-        fincept::services::cloud::CloudSyncEngine::instance().register_adapter(
-            &fincept::services::cloud::WatchlistCloudAdapter::instance());
-        fincept::services::cloud::CloudSyncEngine::instance().register_adapter(
-            &fincept::services::cloud::NotesCloudAdapter::instance());
-        fincept::services::cloud::CloudSyncEngine::instance().register_adapter(
-            &fincept::services::cloud::PortfolioCloudAdapter::instance());
-        fincept::services::cloud::CloudSyncEngine::instance().register_adapter(
-            &fincept::services::cloud::AgentConfigCloudAdapter::instance());
-        fincept::services::cloud::CloudSyncEngine::instance().register_adapter(
-            &fincept::services::cloud::ReportCloudAdapter::instance());
-        fincept::services::cloud::CloudSyncEngine::instance().register_adapter(
-            &fincept::services::cloud::WorkflowCloudAdapter::instance());
-        fincept::services::cloud::CloudSyncEngine::instance().register_adapter(
-            &fincept::services::cloud::DashboardCloudAdapter::instance());
-        fincept::services::cloud::CloudSyncEngine::instance().register_adapter(
-            &fincept::services::cloud::SettingsCloudAdapter::instance());
-        fincept::services::cloud::CloudSyncEngine::instance().register_adapter(
-            &fincept::services::cloud::NewsMonitorCloudAdapter::instance());
-        fincept::services::cloud::CloudSyncEngine::instance().register_adapter(
-            &fincept::services::cloud::NewsFeedCloudAdapter::instance());
-        fincept::services::cloud::CloudSyncEngine::instance().register_adapter(
-            &fincept::services::cloud::NotebookCloudAdapter::instance());
-        fincept::services::cloud::CloudSyncEngine::instance().initialize();
-    };
-
-    // ── Group 3: wallet / treasury / billing + broker session monitor ───────
+    // ── Group 2: wallet / treasury / billing + broker session monitor ───────
     auto init_wallet_treasury_and_monitors = []() {
         // Token metadata refresh — network call to Jupiter aggregator.
         fincept::wallet::TokenMetadataService::instance().refresh_from_jupiter_async();
@@ -667,7 +656,7 @@ int main(int argc, char* argv[]) {
         LOG_INFO("App", "Deferred service init complete");
     };
 
-    post_chain({init_hub_producers, init_cloud_sync, init_wallet_treasury_and_monitors});
+    post_chain({init_hub_producers, init_wallet_treasury_and_monitors});
 
     // Create all application directories under %LOCALAPPDATA%/com.fincept.terminal
     fincept::AppPaths::ensure_all();
@@ -777,8 +766,6 @@ int main(int argc, char* argv[]) {
     // Initialize config
     auto& config = fincept::AppConfig::instance();
     fincept::HttpClient::instance().set_base_url(config.api_base_url());
-    // Note: auth tokens are managed by AuthManager::initialize() which loads
-    // from SecureStorage (DPAPI) and SQLite — not from QSettings/Registry.
 
     // Register migrations explicitly (avoids MSVC /OPT:REF stripping static-init TUs)
     fincept::register_migration_v001();
@@ -832,6 +819,7 @@ int main(int argc, char* argv[]) {
     fincept::register_migration_v049();
     fincept::register_migration_v050();
     fincept::register_migration_v051();
+    fincept::register_migration_v052();
 
     // Open main database
     QString db_path = fincept::AppPaths::data() + "/fincept.db";
@@ -889,9 +877,8 @@ int main(int argc, char* argv[]) {
 
         // Retention sweeper for the append-only tables that had NO reader and NO
         // retention policy, so they grew for the life of the install:
-        // workflow_audit_log (>90d), telemetry_events (>30d), sync_outbox rows
-        // dead-lettered after 20 failed attempts, and expired unified_cache —
-        // which was previously swept once at startup only, so a terminal left
+        // workflow_audit_log (>90d), telemetry_events (>30d), and expired
+        // unified_cache — which was previously swept once at startup only, so a terminal left
         // open for days never reclaimed anything. Runs once now and every ~15
         // minutes thereafter; idempotent, so a second call creates no second
         // timer. Started here (inside the DB-open branch) because every policy
@@ -970,9 +957,17 @@ int main(int argc, char* argv[]) {
     // to new DB (Roaming\Fincept\FinceptTerminal\fincept.db) if the new DB has no settings yet.
     {
         LOG_INFO("App", "Querying settings...");
-        auto existing = fincept::SettingsRepository::instance().get("fincept_session");
+        // "Is the new DB already populated?" — ask the table itself. This used
+        // to probe for the `fincept_session` row, which the v052 migration now
+        // deletes: that sentinel would read as empty on every launch and re-run
+        // the legacy copy forever.
+        bool new_db_empty = true;
+        {
+            QSqlQuery probe(fincept::Database::instance().raw_db());
+            if (probe.exec("SELECT 1 FROM settings LIMIT 1") && probe.next())
+                new_db_empty = false;
+        }
         LOG_INFO("App", "Settings query done");
-        bool new_db_empty = existing.is_err() || existing.value().isEmpty();
         if (new_db_empty) {
             QString local_base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
             // AppLocalDataLocation = .../Local/Fincept/FinceptTerminal — strip to .../Local/FinceptTerminal
@@ -1006,31 +1001,11 @@ int main(int argc, char* argv[]) {
     // Start session
     fincept::SessionManager::instance().start_session();
 
-    // Phase 1 final lift: shell owns auth/lock service initialisation.
-    // bootstrap_auth() runs AuthManager::initialize(), warms PinManager
-    // from SecureStorage, and configures InactivityGuard's lock timeout
-    // from SettingsRepository. The previous in-line block here is folded
-    // into TerminalShell::bootstrap_auth.
-    fincept::TerminalShell::instance().bootstrap_auth();
-
-    // Session guard — auto-logout on 401. Lives on the stack here so its
-    // destructor runs on shutdown via QApplication::exec returning.
-    fincept::auth::SessionGuard session_guard;
-
     // Force the ReportBuilderService singleton onto the main thread before
     // MCP tools register — tools route into it via QMetaObject::invokeMethod
     // with BlockingQueuedConnection from worker threads, so the service must
     // already exist with main-thread affinity.
     (void)fincept::services::ReportBuilderService::instance();
-
-    // Same reason for ForumService: ForumTools (MCP) and ForumScreen (GUI)
-    // share one singleton that owns a QNetworkAccessManager. Whichever caller
-    // hits instance() first dictates thread affinity. If a worker thread
-    // touches it before the GUI does, every subsequent fetch from the Forum
-    // tab queues its reply onto a thread with no live event loop and the
-    // callback never fires — the tab spins on "loading" forever. Forcing
-    // construction here pins it to the main thread up front.
-    (void)fincept::services::ForumService::instance();
 
     // Initialize MCP tool system — registers all internal tools and starts
     // external MCP servers in the background (non-blocking).
@@ -1104,8 +1079,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Start the scan-watch background service. Runs after Database::open() (which
-    // applies the scan_watches migration) and after bootstrap_auth() (broker
-    // creds, needed by the first candle poll), and after the headless self-test
+    // applies the scan_watches migration) and after the headless self-test
     // early-returns above so it is skipped on --selftest-tools / --dump-tools.
     // Placed before the Python-setup branch so both GUI paths (setup screen and
     // normal startup) start it exactly once. Candle fetching is native C++ (broker
@@ -1196,6 +1170,7 @@ int main(int argc, char* argv[]) {
                     auto* window = new fincept::WindowFrame(primary_id);
                     window->setAttribute(Qt::WA_DeleteOnClose);
                     window->show();
+                    start_post_boot_work(window, recovered);
 
                     // Enterprise promo, once the frame has painted. Self-
                     // suppresses when the user ticked "Don't show this again"
@@ -1257,6 +1232,7 @@ int main(int argc, char* argv[]) {
         auto* primary = new fincept::WindowFrame(primary_id);
         primary->setAttribute(Qt::WA_DeleteOnClose);
         primary->show();
+        start_post_boot_work(primary, recovered);
 
         // Smoke test: once the window has painted, walk every screen and exit
         // with the result. Deferred so the shell + router are fully wired. The

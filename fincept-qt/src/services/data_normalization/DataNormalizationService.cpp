@@ -350,21 +350,14 @@ QString DataNormalizationService::build_url(const DataMapping& mapping) {
 
 void DataNormalizationService::apply_auth(const DataMapping& mapping) {
     // ── SECURITY: do NOT mutate the shared HttpClient singleton here ─────────
-    // This used to call set_auth_header() / set_session_token() with the saved
-    // mapping's third-party token and never restore the previous values. Two
-    // consequences, both bad:
+    // This used to stash the saved mapping's third-party token on the shared
+    // HttpClient and never restore it, which leaked that credential onto every
+    // subsequent request the singleton made.
     //
-    //   1. It never worked. build_request() only attaches X-API-Key /
-    //      X-Session-Token when the request host matches base_url_ (the Fincept
-    //      API), so a third-party mapping host never received the token anyway.
-    //   2. It leaked. Every subsequent Fincept API call then transmitted the
-    //      user's third-party credential to api.fincept.in, and the user's own
-    //      session auth stayed broken until AuthManager happened to rewrite it.
-    //
-    // Applying mapping auth correctly needs per-request headers on HttpClient
-    // (or a scoped guard that restores api_key_ / session_token_). Until that
-    // API exists, mapping auth is inert — which is what it already was — but it
-    // no longer corrupts global auth state.
+    // HttpClient now carries no credential state at all; the supported way to
+    // authenticate one call is the per-request `Headers` argument. Wiring
+    // mapping auth through it is unfinished work — mapping auth is inert, which
+    // is what it already was, but it corrupts nothing.
     if (mapping.auth_type == "API Key" || mapping.auth_type == "Bearer Token") {
         if (!mapping.auth_token.isEmpty()) {
             LOG_WARN(TAG, QString("Mapping '%1' declares %2 auth, but per-request auth headers are not "

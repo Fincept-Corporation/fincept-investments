@@ -1,6 +1,5 @@
 #include "storage/repositories/NotesRepository.h"
 
-#include "storage/sync/SyncOutbox.h"
 
 namespace fincept {
 
@@ -48,8 +47,6 @@ Result<qint64> NotesRepository::create(const FinancialNote& n) {
                          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                          {n.title, n.content, n.category, n.priority, n.tags, n.tickers, n.sentiment,
                           n.is_favorite ? 1 : 0, n.is_archived ? 1 : 0, n.color_code, n.reminder_date, n.word_count});
-    if (r.is_ok())
-        SyncOutbox::record("note", QString::number(r.value()), "create");
     return r;
 }
 
@@ -87,15 +84,11 @@ Result<void> NotesRepository::update(const FinancialNote& n) {
                    "WHERE id = ?",
                    {n.title, n.content, n.category, n.priority, n.tags, n.tickers, n.sentiment, n.is_favorite ? 1 : 0,
                     n.is_archived ? 1 : 0, n.color_code, n.reminder_date, n.word_count, n.id});
-    if (r.is_ok())
-        SyncOutbox::record("note", QString::number(n.id), "update");
     return r;
 }
 
 Result<void> NotesRepository::remove(int id) {
     auto r = exec_write("DELETE FROM financial_notes WHERE id = ?", {id});
-    if (r.is_ok())
-        SyncOutbox::record("note", QString::number(id), "delete");
     return r;
 }
 
@@ -103,8 +96,6 @@ Result<void> NotesRepository::toggle_favorite(int id) {
     auto r = exec_write("UPDATE financial_notes SET is_favorite = NOT is_favorite, "
                         "updated_at = datetime('now') WHERE id = ?",
                         {id});
-    if (r.is_ok())
-        SyncOutbox::record("note", QString::number(id), "favorite");
     return r;
 }
 
@@ -112,8 +103,6 @@ Result<void> NotesRepository::toggle_archive(int id) {
     auto r = exec_write("UPDATE financial_notes SET is_archived = NOT is_archived, "
                         "updated_at = datetime('now') WHERE id = ?",
                         {id});
-    if (r.is_ok())
-        SyncOutbox::record("note", QString::number(id), "archive");
     return r;
 }
 

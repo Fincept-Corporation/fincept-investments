@@ -349,15 +349,6 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
         follow_body["generationConfig"] = QJsonObject{{"maxOutputTokens", resolved_max_tokens()}};
         if (!system_prompt_.isEmpty())
             follow_body["systemInstruction"] = QJsonObject{{"parts", QJsonArray{QJsonObject{{"text", system_prompt_}}}}};
-    } else if (provider_ == "fincept") {
-        // /research/chat uses messages array
-        QJsonArray msgs;
-        if (!system_prompt_.isEmpty())
-            msgs.append(QJsonObject{{"role", "system"}, {"content", system_prompt_}});
-        msgs.append(QJsonObject{{"role", "user"}, {"content", follow_prompt}});
-        follow_body["messages"] = msgs;
-        if (!model_.isEmpty() && model_ != "fincept-llm")
-            follow_body["model"] = model_;
     } else {
         // OpenAI-compatible
         QJsonArray msgs;
@@ -398,12 +389,6 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
         const QJsonArray cands = fu_rj["candidates"].toArray();
         if (!cands.isEmpty())
             resp.content = extract_gemini_parts_text(cands[0].toObject()["content"].toObject()["parts"].toArray());
-    } else if (provider_ == "fincept") {
-        // /research/chat: {"success":true,"data":{"choices":[{"message":{"content":"..."}}]}}
-        QJsonObject data = fu_rj.contains("data") ? fu_rj["data"].toObject() : fu_rj;
-        QJsonArray fu_choices = data["choices"].toArray();
-        if (!fu_choices.isEmpty())
-            resp.content = extract_openai_message_text(fu_choices[0].toObject()["message"].toObject());
     } else {
         QJsonArray choices = fu_rj["choices"].toArray();
         if (!choices.isEmpty())

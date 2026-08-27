@@ -7,12 +7,13 @@
 // correct, which turns an infeasible guess into a byte-at-a-time search.
 //
 // Header-only so the loopback HTTP bridges (services/wallet/*, mcp/*) and the
-// auth layer share one implementation instead of each rolling their own.
+// broker OAuth catcher share one implementation instead of each rolling their
+// own.
 
 #include <QByteArray>
 #include <QString>
 
-namespace fincept::auth {
+namespace fincept::security {
 
 /// Returns true iff `a` and `b` are the same length AND every byte matches.
 /// The XOR-accumulate loop touches every byte even on mismatch so execution
@@ -35,4 +36,4 @@ inline bool constant_time_equals(const QString& a, const QString& b) {
     return constant_time_equals(a.toUtf8(), b.toUtf8());
 }
 
-} // namespace fincept::auth
+} // namespace fincept::security

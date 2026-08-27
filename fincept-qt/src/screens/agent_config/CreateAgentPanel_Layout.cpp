@@ -307,7 +307,7 @@ QWidget* CreateAgentPanel::build_form_panel() {
     // UI-only categories (navigation/system/settings) and recursive ones
     // (ai-chat/meta) — agents shouldn't drive the UI or call the chat LLM.
     for (const auto& cat : {"markets", "watchlist", "news", "portfolio", "notes", "crypto-trading", "paper-trading",
-                            "sec-edgar", "ma-analytics", "alt-investments", "data-sources", "forum", "profile",
+                            "sec-edgar", "ma-analytics", "alt-investments", "data-sources",
                             "file_manager", "report-builder", "python", "datahub", "analytics"}) {
         auto* item = new QListWidgetItem(cat);
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);

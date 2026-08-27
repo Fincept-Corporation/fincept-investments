@@ -396,28 +396,6 @@ QWidget* DocsScreen::page_settings() {
         });
 }
 
-QWidget* DocsScreen::page_profile() {
-    return make_page(
-        tr("PROFILE"), tr("User account, subscription, and usage tracking"),
-        {
-            {tr("OVERVIEW"), tr("The Profile screen displays your account information, subscription status, "
-                                "usage statistics, and billing history.")},
-            {tr("KEY FEATURES"), tr("■  Account details — Name, email, registration date\n"
-                                    "■  Subscription status — Current plan, expiry, features\n"
-                                    "■  Usage statistics — API calls, data consumed, trades placed\n"
-                                    "■  Credit balance — Remaining AI/compute credits\n"
-                                    "■  Billing history — Past invoices and payments")},
-            {tr("REAL-WORLD USAGE"), tr("■  Monitor your subscription and credit usage\n"
-                                        "■  Upgrade or change your plan\n"
-                                        "■  Track API usage to stay within limits\n"
-                                        "■  Download billing records for expense tracking")},
-            {tr("SKILL LEVELS"), tr("BEGINNER: Check your account status and plan\n"
-                                    "INTERMEDIATE: Monitor credit usage, plan API call budget\n"
-                                    "ADVANCED: Optimize usage patterns for cost efficiency\n"
-                                    "PRO: Enterprise account management, team usage tracking")},
-        });
-}
-
 // ============================================================================
 // Sidebar
 // ============================================================================

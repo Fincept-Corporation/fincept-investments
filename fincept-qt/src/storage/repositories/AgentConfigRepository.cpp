@@ -1,6 +1,5 @@
 #include "storage/repositories/AgentConfigRepository.h"
 
-#include "storage/sync/SyncOutbox.h"
 
 namespace fincept {
 
@@ -41,23 +40,17 @@ Result<void> AgentConfigRepository::save(const AgentConfig& c) {
                    "(id, name, description, config_json, category, is_default, is_active, updated_at) "
                    "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
                    {c.id, c.name, c.description, c.config_json, c.category, c.is_default ? 1 : 0, c.is_active ? 1 : 0});
-    if (r.is_ok())
-        SyncOutbox::record_unique("agent_config", c.id, "upsert");
     return r;
 }
 
 Result<void> AgentConfigRepository::remove(const QString& id) {
     auto r = exec_write("DELETE FROM agent_configs WHERE id = ?", {id});
-    if (r.is_ok())
-        SyncOutbox::record("agent_config", id, "delete");
     return r;
 }
 
 Result<void> AgentConfigRepository::set_active(const QString& id) {
     exec_write("UPDATE agent_configs SET is_active = 0", {});
     auto r = exec_write("UPDATE agent_configs SET is_active = 1, updated_at = datetime('now') WHERE id = ?", {id});
-    if (r.is_ok())
-        SyncOutbox::record_unique("agent_config", id, "activate");
     return r;
 }
 

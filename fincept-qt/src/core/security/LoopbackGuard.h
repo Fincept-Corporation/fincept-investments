@@ -1,11 +1,11 @@
 #pragma once
 // Request-origin validation for the terminal's loopback HTTP listeners.
 //
-// Five servers in this codebase bind 127.0.0.1 and hand out or accept something
+// Four servers in this codebase bind 127.0.0.1 and hand out or accept something
 // sensitive: the broker OAuth redirect catcher (trading/auth/RedirectServer),
-// the Google desktop-login catcher (auth/GoogleDesktopLogin), the wallet
-// connect bridge and the wallet transaction bridge (services/wallet/*), and the
-// agent MCP bridge (mcp/TerminalMcpBridge). Binding loopback keeps other hosts
+// the wallet connect bridge and the wallet transaction bridge
+// (services/wallet/*), and the agent MCP bridge (mcp/TerminalMcpBridge).
+// Binding loopback keeps other hosts
 // out, but it does NOT keep out the user's own browser — and that is the actual
 // attacker here:
 //
@@ -43,7 +43,7 @@
 #include <QByteArray>
 #include <QString>
 
-namespace fincept::auth {
+namespace fincept::security {
 
 /// Case-insensitive lookup of an HTTP header value in a raw request buffer.
 /// `raw_request` may be the whole request or just the head; parsing stops at
@@ -140,4 +140,4 @@ inline LoopbackCheck check_loopback_request(const QByteArray& raw_request, quint
     return {true, {}};
 }
 
-} // namespace fincept::auth
+} // namespace fincept::security

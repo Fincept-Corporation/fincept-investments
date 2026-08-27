@@ -19,7 +19,6 @@
 #include "mcp/tools/EquityResearchTools.h"
 #include "mcp/tools/ExcelTools.h"
 #include "mcp/tools/FileManagerTools.h"
-#include "mcp/tools/ForumTools.h"
 #include "mcp/tools/GeopoliticsTools.h"
 #include "mcp/tools/GovDataTools.h"
 #include "mcp/tools/JobTools.h"
@@ -33,7 +32,6 @@
 #include "mcp/tools/NotesTools.h"
 #include "mcp/tools/PaperTradingTools.h"
 #include "mcp/tools/PortfolioTools.h"
-#include "mcp/tools/ProfileTools.h"
 #include "mcp/tools/PythonTools.h"
 #include "mcp/tools/QuantLabTools.h"
 #include "mcp/tools/ReportBuilderTools.h"
@@ -154,11 +152,7 @@ void initialize_all_tools() {
     // data sources tab
     provider.register_tools(tools::get_data_sources_tools());
 
-    // forum tab
-    provider.register_tools(tools::get_forum_tools());
 
-    // profile tab
-    provider.register_tools(tools::get_profile_tools());
 
     // file manager tab
     provider.register_tools(tools::get_file_manager_tools());

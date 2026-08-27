@@ -1,7 +1,6 @@
 #include "storage/repositories/WorkflowRepository.h"
 
 #include "core/logging/Logger.h"
-#include "storage/sync/SyncOutbox.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -95,7 +94,6 @@ Result<void> WorkflowRepository::save(const workflow::WorkflowDef& wf) {
 
     LOG_INFO("WorkflowRepo",
              QString("Saved workflow: %1 (%2 nodes, %3 edges)").arg(wf.name).arg(wf.nodes.size()).arg(wf.edges.size()));
-    SyncOutbox::record_unique("workflow", wf.id, "upsert");
     return Result<void>::ok();
 }
 
@@ -192,8 +190,6 @@ Result<QVector<WorkflowRow>> WorkflowRepository::list_all() {
 Result<void> WorkflowRepository::remove(const QString& id) {
     // Foreign key cascade handles nodes and edges
     auto r = exec_write("DELETE FROM workflows WHERE id = ?", {id});
-    if (r.is_ok())
-        SyncOutbox::record("workflow", id, "delete");
     return r;
 }
 

@@ -1,6 +1,5 @@
 #include "storage/repositories/NotebookRepository.h"
 
-#include "storage/sync/SyncOutbox.h"
 
 namespace fincept {
 
@@ -31,15 +30,11 @@ Result<void> NotebookRepository::save(const Notebook& n) {
                         "(id, name, description, cells, metadata, execution_counter, updated_at) "
                         "VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
                         {n.id, n.name, n.description, n.cells, n.metadata, n.execution_counter});
-    if (r.is_ok())
-        SyncOutbox::record_unique("notebook", n.id, "upsert");
     return r;
 }
 
 Result<void> NotebookRepository::remove(const QString& id) {
     auto r = exec_write("DELETE FROM notebooks WHERE id = ?", {id});
-    if (r.is_ok())
-        SyncOutbox::record("notebook", id, "delete");
     return r;
 }
 

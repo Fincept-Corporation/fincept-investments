@@ -63,16 +63,16 @@ class StorageManager : public QObject {
     //
     // Several tables were append-only with no reader and no retention, so they
     // grew for the life of the install: `workflow_audit_log` (a row per node
-    // execution), `telemetry_events` (a row per action.invoke), `sync_outbox`
-    // rows whose push kept failing, and `unified_cache`, which was swept only
-    // once at startup — a terminal left open for days never reclaimed anything.
+    // execution), `telemetry_events` (a row per action.invoke), and
+    // `unified_cache`, which was swept only once at startup — a terminal left
+    // open for days never reclaimed anything.
 
     /// Apply every retention policy once. Safe to call repeatedly; each policy
     /// is independent and a failure in one is logged, not propagated (this runs
     /// unattended on a timer — one missing table must not stop the rest).
     ///
     /// Policies: workflow_audit_log > 90 days, telemetry_events > 30 days,
-    /// sync_outbox with attempts > 20 (dead-lettered), expired unified_cache.
+    /// expired unified_cache.
     Result<void> prune_all();
 
     /// Dispatch `prune_all()` onto a worker thread. Never call `prune_all()`

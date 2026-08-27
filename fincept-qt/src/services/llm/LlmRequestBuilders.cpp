@@ -167,24 +167,4 @@ QJsonArray LlmService::build_gemini_tools(const QSet<QString>& activated) {
     return mcp::McpService::instance().format_tools_for_gemini(detail::apply_request_policy(tool_filter_), activated);
 }
 
-QJsonObject LlmService::build_fincept_request(const QString& user_message,
-                                              const std::vector<ConversationMessage>& history, bool with_tools) {
-    // /research/chat uses OpenAI messages format.
-    QJsonArray messages;
-    if (!system_prompt_.isEmpty())
-        messages.append(QJsonObject{{"role", "system"}, {"content", system_prompt_}});
-    for (const auto& m : history)
-        messages.append(QJsonObject{{"role", m.role}, {"content", m.content}});
-    messages.append(QJsonObject{{"role", "user"}, {"content", user_message}});
-
-    QJsonObject req;
-    req["messages"] = messages;
-    // Skip the legacy "fincept-llm" placeholder.
-    if (!model_.isEmpty() && model_ != "fincept-llm")
-        req["model"] = model_;
-
-    Q_UNUSED(with_tools) // /research/chat does not support tools yet.
-    return req;
-}
-
 } // namespace fincept::ai_chat

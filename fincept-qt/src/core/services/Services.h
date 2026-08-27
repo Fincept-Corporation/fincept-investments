@@ -20,10 +20,6 @@ class EventBus;
 class Database;
 class SecureStorage;
 
-namespace auth {
-class AuthManager;
-} // namespace auth
-
 namespace datahub {
 class DataHub;
 } // namespace datahub
@@ -41,7 +37,6 @@ class Services {
     static Services& root();
 
     // -- Accessors (façade over existing singletons during migration) ----------
-    auth::AuthManager& auth();
     EventBus& events();
     Database& db();
     SecureStorage& secure_storage();

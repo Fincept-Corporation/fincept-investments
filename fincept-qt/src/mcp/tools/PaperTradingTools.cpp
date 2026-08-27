@@ -121,7 +121,6 @@ std::vector<ToolDef> get_paper_trading_tools() {
         // Phase 6.3: even paper trades should confirm — the LLM's intent may
         // not match the user's. Real-broker tools (when added) will use
         // ExplicitConfirm + is_destructive=true.
-        t.auth_required = AuthLevel::Authenticated;
         t.is_destructive = true;
         t.input_schema = ToolSchemaBuilder()
                              .string("portfolio_id", "Portfolio ID")

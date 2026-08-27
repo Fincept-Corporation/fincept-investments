@@ -15,7 +15,6 @@
 #include "core/session/ScreenStateManager.h"
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
-#include "services/cloud/CloudSyncEngine.h"
 #include "services/file_manager/FileManagerService.h"
 #include "services/markets/MarketDataService.h"
 #include "services/report_builder/ReportBuilderService.h"
@@ -509,8 +508,6 @@ void ReportBuilderScreen::showEvent(QShowEvent* e) {
     // The service runs autosave continuously. We just rebind from current
     // service state in case mutations happened while the screen was hidden.
     rebind_from_service();
-    // Rate-gated pull of cloud reports on screen entry (no-op when sync is off).
-    fincept::services::cloud::CloudSyncEngine::instance().request_pull(QStringLiteral("report"));
 }
 
 void ReportBuilderScreen::hideEvent(QHideEvent* e) {

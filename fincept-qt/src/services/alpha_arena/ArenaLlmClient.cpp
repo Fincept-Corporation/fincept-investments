@@ -1,6 +1,5 @@
 #include "services/alpha_arena/ArenaLlmClient.h"
 
-#include "auth/AuthManager.h"
 #include "core/config/AppConfig.h"
 #include "services/llm/ModelCatalog.h"
 #include "services/llm/ProviderCatalog.h"
@@ -38,17 +37,14 @@ QByteArray ArenaLlmClient::build_body(const ArenaLlmRequest& req) {
         body["contents"] =
             QJsonArray{QJsonObject{{"role", "user"}, {"parts", QJsonArray{QJsonObject{{"text", req.user_prompt}}}}}};
         body["generationConfig"] = QJsonObject{{"maxOutputTokens", max_tokens}};
-    } else { // OpenAI-compatible family + fincept (/research/chat takes OpenAI messages)
+    } else { // OpenAI-compatible family
         body["messages"] = QJsonArray{QJsonObject{{"role", "system"}, {"content", req.system_prompt}},
                                       QJsonObject{{"role", "user"}, {"content", req.user_prompt}}};
-        if (p != "fincept" || (req.model_id != "fincept-llm" && !req.model_id.isEmpty()))
-            body["model"] = req.model_id;
-        if (p != "fincept") {
-            if (p == "openai" || p == "xai")
-                body["max_completion_tokens"] = max_tokens;
-            else
-                body["max_tokens"] = max_tokens;
-        }
+        body["model"] = req.model_id;
+        if (p == "openai" || p == "xai")
+            body["max_completion_tokens"] = max_tokens;
+        else
+            body["max_tokens"] = max_tokens;
     }
     return QJsonDocument(body).toJson(QJsonDocument::Compact);
 }
@@ -87,7 +83,7 @@ ArenaLlmResult ArenaLlmClient::parse_response(const QString& provider, const QBy
         const auto choices = o.value("choices").toArray();
         if (!choices.isEmpty())
             r.content = choices[0].toObject().value("message").toObject().value("content").toString();
-        if (r.content.isEmpty()) // fincept /research/chat tolerant fallbacks
+        if (r.content.isEmpty()) // tolerant fallbacks for non-standard shapes
             r.content = o.value("content").toString();
         if (r.content.isEmpty())
             r.content = o.value("response").toString();
@@ -105,9 +101,7 @@ ArenaLlmResult ArenaLlmClient::parse_response(const QString& provider, const QBy
 
 void ArenaLlmClient::complete(const ArenaLlmRequest& req, std::function<void(ArenaLlmResult)> cb) {
     const QString p = req.provider.toLower();
-    QString url = ProviderCatalog::chat_endpoint(p, req.base_url, req.model_id);
-    if (p == "fincept")
-        url = fincept::AppConfig::instance().api_base_url() + "/research/chat";
+    const QString url = ProviderCatalog::chat_endpoint(p, req.base_url, req.model_id);
     if (url.isEmpty()) {
         ArenaLlmResult r;
         r.error = "no endpoint for provider " + p;
@@ -122,13 +116,6 @@ void ArenaLlmClient::complete(const ArenaLlmRequest& req, std::function<void(Are
         nr.setRawHeader("anthropic-version", "2023-06-01");
     } else if (p == "gemini" || p == "google") {
         nr.setRawHeader("x-goog-api-key", req.api_key.toUtf8());
-    } else if (p == "fincept") {
-        if (!req.api_key.isEmpty())
-            nr.setRawHeader("X-API-Key", req.api_key.toUtf8());
-        const auto& sess = fincept::auth::AuthManager::instance().session();
-        if (!sess.session_token.isEmpty())
-            nr.setRawHeader("X-Session-Token", sess.session_token.toUtf8());
-        nr.setRawHeader("User-Agent", "FinceptTerminal/4.0");
     } else if (!req.api_key.isEmpty()) {
         nr.setRawHeader("Authorization", ("Bearer " + req.api_key).toUtf8());
     }

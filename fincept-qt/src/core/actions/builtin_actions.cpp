@@ -2,7 +2,6 @@
 
 #include "app/DockScreenRouter.h"
 #include "app/WindowFrame.h"
-#include "auth/InactivityGuard.h"
 #include "core/actions/ActionRegistry.h"
 #include "core/debug/StressLoad.h"
 #include "core/keys/KeyConfigManager.h"
@@ -43,13 +42,6 @@ ActionPredicate require_focused_frame() {
     return [](const CommandContext& ctx) { return ctx.focused_frame != nullptr; };
 }
 
-ActionPredicate require_unlocked_frame() {
-    // A focused frame in the locked state still receives events but actions
-    // should be inert. The lock-on-minimise flow and PIN gate set
-    // `WindowFrame::is_locked() == true` while the lock overlay is visible.
-    return [](const CommandContext& ctx) { return ctx.focused_frame && !ctx.focused_frame->is_locked(); };
-}
-
 ActionPredicate require_more_than_one_window() {
     return [](const CommandContext&) { return WindowRegistry::instance().frame_count() > 1; };
 }
@@ -59,13 +51,6 @@ ActionPredicate require_more_than_one_monitor() {
 }
 
 // ── Handler helpers ──────────────────────────────────────────────────────────
-
-Result<void> handler_toggle_chat(const CommandContext& ctx) {
-    if (!ctx.focused_frame || ctx.focused_frame->is_locked())
-        return Result<void>::ok(); // inert
-    ctx.focused_frame->toggle_chat_mode_action();
-    return Result<void>::ok();
-}
 
 Result<void> handler_fullscreen(const CommandContext& ctx) {
     if (!ctx.focused_frame)
@@ -78,14 +63,14 @@ Result<void> handler_fullscreen(const CommandContext& ctx) {
 }
 
 Result<void> handler_focus_mode(const CommandContext& ctx) {
-    if (!ctx.focused_frame || ctx.focused_frame->is_locked())
+    if (!ctx.focused_frame)
         return Result<void>::ok();
     ctx.focused_frame->toggle_focus_mode();
     return Result<void>::ok();
 }
 
 Result<void> handler_refresh(const CommandContext& ctx) {
-    if (!ctx.focused_frame || ctx.focused_frame->is_locked())
+    if (!ctx.focused_frame)
         return Result<void>::ok();
     ctx.focused_frame->refresh_focused_panel();
     return Result<void>::ok();
@@ -112,21 +97,15 @@ Result<void> handler_screenshot(const CommandContext& ctx) {
     return Result<void>::ok();
 }
 
-Result<void> handler_lock_now(const CommandContext&) {
-    // Lock is shell-level; deliberately ignores focused frame state.
-    auth::InactivityGuard::instance().trigger_manual_lock();
-    return Result<void>::ok();
-}
-
 Result<void> handler_always_on_top(const CommandContext& ctx) {
-    if (!ctx.focused_frame || ctx.focused_frame->is_locked())
+    if (!ctx.focused_frame)
         return Result<void>::ok();
     ctx.focused_frame->set_always_on_top(!ctx.focused_frame->is_always_on_top());
     return Result<void>::ok();
 }
 
 Result<void> handler_browse_components(const CommandContext& ctx) {
-    if (!ctx.focused_frame || ctx.focused_frame->is_locked())
+    if (!ctx.focused_frame)
         return Result<void>::ok();
     ctx.focused_frame->open_component_browser();
     return Result<void>::ok();
@@ -243,7 +222,7 @@ Result<void> handler_layout_import(const CommandContext& ctx) {
 Result<void> handler_layout_tile_2x2(const CommandContext& ctx) {
     // Decision 5.5: tile current frame's panels into a 2x2 grid across the
     // active monitor. Implementation in DockScreenRouter::tile_2x2.
-    if (!ctx.focused_frame || ctx.focused_frame->is_locked())
+    if (!ctx.focused_frame)
         return Result<void>::ok();
     if (auto* router = ctx.focused_frame->dock_router())
         router->tile_2x2();
@@ -255,21 +234,21 @@ Result<void> handler_panel_fullscreen_toggle(const CommandContext& ctx) {
     // Wire to WindowFrame::toggle_focus_mode for v1 (which already hides
     // the toolbar/status/pushpin chrome). The "panel takes over" half is
     // a Phase 6 polish (needs router-level "show only this panel" mode).
-    if (!ctx.focused_frame || ctx.focused_frame->is_locked())
+    if (!ctx.focused_frame)
         return Result<void>::ok();
     ctx.focused_frame->toggle_focus_mode();
     return Result<void>::ok();
 }
 
 Result<void> handler_cmdbar_toggle(const CommandContext& ctx) {
-    if (!ctx.focused_frame || ctx.focused_frame->is_locked())
+    if (!ctx.focused_frame)
         return Result<void>::ok();
     ctx.focused_frame->toggle_command_bar();
     return Result<void>::ok();
 }
 
 Result<void> handler_palette_open(const CommandContext& ctx) {
-    if (!ctx.focused_frame || ctx.focused_frame->is_locked())
+    if (!ctx.focused_frame)
         return Result<void>::ok();
     ctx.focused_frame->open_command_palette();
     return Result<void>::ok();
@@ -313,7 +292,7 @@ QString focused_panel_id_(WindowFrame* frame) {
 }
 
 Result<void> handler_tear_off(const CommandContext& ctx) {
-    if (!ctx.focused_frame || ctx.focused_frame->is_locked())
+    if (!ctx.focused_frame)
         return Result<void>::ok();
     auto* router = ctx.focused_frame->dock_router();
     if (!router)
@@ -334,7 +313,7 @@ Result<void> handler_tear_off(const CommandContext& ctx) {
 // command like `link group red` resolves to set_group(SymbolGroup::A) etc.
 
 IGroupLinked* focused_linked_(const CommandContext& ctx) {
-    if (!ctx.focused_frame || ctx.focused_frame->is_locked() || !ctx.focused_frame->dock_router())
+    if (!ctx.focused_frame || !ctx.focused_frame->dock_router())
         return nullptr;
     auto* router = ctx.focused_frame->dock_router();
     const QString id = router->current_screen_id();
@@ -415,7 +394,7 @@ Result<void> handler_link_publish_to_group(const CommandContext& ctx) {
 }
 
 Result<void> handler_move_to_frame(const CommandContext& ctx) {
-    if (!ctx.focused_frame || ctx.focused_frame->is_locked())
+    if (!ctx.focused_frame)
         return Result<void>::ok();
     auto* router = ctx.focused_frame->dock_router();
     if (!router)
@@ -512,17 +491,6 @@ void register_builtins() {
     // ── Frame-level chrome / view actions ──────────────────────────────────
 
     register_one(ActionDef{
-        /*id*/ "frame.toggle_chat_mode",
-        /*display*/ "Toggle Chat Mode",
-        /*category*/ "Frame",
-        /*aliases*/ {"chat", "toggle chat"},
-        /*default_hotkey*/ current_key_for(KeyAction::ToggleChat),
-        /*predicate*/ require_unlocked_frame(),
-        /*handler*/ &handler_toggle_chat,
-        /*parameter_slots*/ {},
-    });
-
-    register_one(ActionDef{
         "frame.toggle_fullscreen",
         "Toggle Fullscreen",
         "Frame",
@@ -539,7 +507,7 @@ void register_builtins() {
         "Frame",
         {"focus mode", "distraction free"},
         current_key_for(KeyAction::FocusMode),
-        require_unlocked_frame(),
+        require_focused_frame(),
         &handler_focus_mode,
         {},
     });
@@ -550,7 +518,7 @@ void register_builtins() {
         "Frame",
         {"always on top", "pin window"},
         current_key_for(KeyAction::ToggleAlwaysOnTop),
-        require_unlocked_frame(),
+        require_focused_frame(),
         &handler_always_on_top,
         {},
     });
@@ -572,7 +540,7 @@ void register_builtins() {
         "Frame",
         {"components", "screen browser"},
         current_key_for(KeyAction::BrowseComponents),
-        require_unlocked_frame(),
+        require_focused_frame(),
         &handler_browse_components,
         {},
     });
@@ -668,7 +636,7 @@ void register_builtins() {
         "Layout",
         {"tile", "2x2"},
         QKeySequence(),
-        require_unlocked_frame(),
+        require_focused_frame(),
         &handler_layout_tile_2x2,
         {},
     });
@@ -679,7 +647,7 @@ void register_builtins() {
         "Panel",
         {"panel fullscreen", "zoom panel"},
         QKeySequence(),
-        require_unlocked_frame(),
+        require_focused_frame(),
         &handler_panel_fullscreen_toggle,
         {},
     });
@@ -692,7 +660,7 @@ void register_builtins() {
         "Command",
         {"command bar", "show command bar"},
         QKeySequence(QStringLiteral("Ctrl+\\")),
-        require_unlocked_frame(),
+        require_focused_frame(),
         &handler_cmdbar_toggle,
         {},
     });
@@ -703,7 +671,7 @@ void register_builtins() {
         "Command",
         {"palette", "command palette"},
         QKeySequence(QStringLiteral("Ctrl+K")),
-        require_unlocked_frame(),
+        require_focused_frame(),
         &handler_palette_open,
         {},
     });
@@ -731,7 +699,7 @@ void register_builtins() {
         "Panel",
         {"refresh", "reload"},
         current_key_for(KeyAction::Refresh),
-        require_unlocked_frame(),
+        require_focused_frame(),
         &handler_refresh,
         {},
     });
@@ -742,7 +710,7 @@ void register_builtins() {
         "Panel",
         {"next panel"},
         current_key_for(KeyAction::CyclePanelsForward),
-        require_unlocked_frame(),
+        require_focused_frame(),
         [](const CommandContext& ctx) { return handler_cycle_panels(true, ctx); },
         {},
     });
@@ -753,7 +721,7 @@ void register_builtins() {
         "Panel",
         {"previous panel"},
         current_key_for(KeyAction::CyclePanelsBack),
-        require_unlocked_frame(),
+        require_focused_frame(),
         [](const CommandContext& ctx) { return handler_cycle_panels(false, ctx); },
         {},
     });
@@ -767,7 +735,7 @@ void register_builtins() {
         "Panel",
         {"tear off", "panel popout", "popout panel"},
         QKeySequence(),
-        require_unlocked_frame(),
+        require_focused_frame(),
         &handler_tear_off,
         {},
     });
@@ -790,7 +758,7 @@ void register_builtins() {
         "Link",
         {"link", "link to group", "set group"},
         QKeySequence(),
-        require_unlocked_frame(),
+        require_focused_frame(),
         &handler_link_set_group,
         {
             ParameterSlot{
@@ -810,7 +778,7 @@ void register_builtins() {
         "Link",
         {"unlink", "clear link"},
         QKeySequence(),
-        require_unlocked_frame(),
+        require_focused_frame(),
         &handler_link_clear_group,
         {},
     });
@@ -928,19 +896,6 @@ void register_builtins() {
         }
     }
 
-    // ── Terminal-level actions (shell-scoped, ignore focused frame) ────────
-
-    register_one(ActionDef{
-        "terminal.lock_now",
-        "Lock Terminal",
-        "Terminal",
-        {"lock", "lock now"},
-        current_key_for(KeyAction::LockNow),
-        /*predicate*/ {}, // always available
-        &handler_lock_now,
-        {},
-    });
-
     // ── Help-level actions ──────────────────────────────────────────────────
 
     register_one(ActionDef{
@@ -965,16 +920,12 @@ QString action_id_for(KeyAction a) {
     switch (a) {
         case KeyAction::Refresh:
             return QStringLiteral("panel.refresh");
-        case KeyAction::ToggleChat:
-            return QStringLiteral("frame.toggle_chat_mode");
         case KeyAction::FocusMode:
             return QStringLiteral("frame.toggle_focus_mode");
         case KeyAction::Fullscreen:
             return QStringLiteral("frame.toggle_fullscreen");
         case KeyAction::Screenshot:
             return QStringLiteral("frame.screenshot");
-        case KeyAction::LockNow:
-            return QStringLiteral("terminal.lock_now");
         case KeyAction::ToggleAlwaysOnTop:
             return QStringLiteral("frame.toggle_always_on_top");
         case KeyAction::BrowseComponents:

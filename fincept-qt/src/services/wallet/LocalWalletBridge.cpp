@@ -1,7 +1,7 @@
 #include "services/wallet/LocalWalletBridge.h"
 
-#include "auth/ConstantTime.h"
-#include "auth/LoopbackGuard.h"
+#include "core/security/ConstantTime.h"
+#include "core/security/LoopbackGuard.h"
 #include "core/logging/Logger.h"
 
 #include <QByteArray>
@@ -170,8 +170,8 @@ void LocalWalletBridge::on_new_connection() {
             // Host + fetch-metadata guard. Blocks DNS rebinding and any
             // cross-origin subresource request from another page the user has
             // open; our own served page is same-origin and always passes.
-            // See auth/LoopbackGuard.h for the full threat model.
-            const auto guard = fincept::auth::check_loopback_request(header_block, own_port());
+            // See core/security/LoopbackGuard.h for the full threat model.
+            const auto guard = fincept::security::check_loopback_request(header_block, own_port());
             if (!guard.allowed) {
                 LOG_WARN("WalletBridge", "rejected request: " + guard.reason);
                 write_response(socket, 403, "text/plain", "forbidden");
@@ -214,7 +214,7 @@ void LocalWalletBridge::handle_request(QTcpSocket* socket, const QByteArray& /*r
     // differing byte, and the timing difference leaks the token byte by byte to
     // anything that can hammer this port.
     const auto token_in_query = query_param(path, "token");
-    if (!fincept::auth::constant_time_equals(token_in_query, connect_token_)) {
+    if (!fincept::security::constant_time_equals(token_in_query, connect_token_)) {
         LOG_WARN("WalletBridge", QStringLiteral("token mismatch on %1 (got %2 chars)")
                                      .arg(QString::fromLatin1(path))
                                      .arg(token_in_query.size()));

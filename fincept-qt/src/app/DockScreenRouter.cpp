@@ -9,7 +9,6 @@
 #include "app/DockScreenRouter.h"
 
 #include "app/WindowFrame.h"
-#include "auth/InactivityGuard.h"
 #include "core/components/PopularityTracker.h"
 #include "core/keys/WindowCycler.h"
 #include "core/logging/Logger.h"
@@ -75,7 +74,6 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"alt_investments", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Alt Investments")},
         {"ma_analytics", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "M&A Analytics")},
         {"surface_analytics", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Surface Analytics")},
-        {"quantlib", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "QuantLib")},
         {"ai_quant_lab", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "AI Quant Lab")},
         {"alpha_arena", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Alpha Arena")},
         {"agent_config", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Agent Config")},
@@ -89,11 +87,8 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"data_mapping", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Data Mapping")},
         {"file_manager", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "File Manager")},
         {"notes", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Notes")},
-        {"forum", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Forum")},
         {"docs", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Docs")},
-        {"support", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Support")},
         {"about", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "About")},
-        {"profile", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Profile")},
         {"settings", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Settings")},
         {"contact", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Contact")},
         {"terms", QT_TRANSLATE_NOOP("fincept::DockScreenRouter", "Terms")},

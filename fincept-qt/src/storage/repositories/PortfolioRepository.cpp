@@ -2,7 +2,6 @@
 #include "storage/repositories/PortfolioRepository.h"
 
 #include "core/logging/Logger.h"
-#include "storage/sync/SyncOutbox.h"
 
 #include <QDateTime>
 #include <QUuid>
@@ -100,7 +99,6 @@ Result<QString> PortfolioRepository::create_portfolio(const QString& name, const
         "PortfolioRepo",
         QString("Created portfolio '%1' (%2)%3")
             .arg(name, id, broker_account_id.isEmpty() ? QString() : QString(" [broker:%1]").arg(broker_account_id)));
-    SyncOutbox::record_unique("portfolio", id, "sync");
     return Result<QString>::ok(id);
 }
 
@@ -109,16 +107,12 @@ Result<void> PortfolioRepository::update_portfolio(const QString& id, const QStr
     auto r = exec_write("UPDATE portfolios SET name = ?, owner = ?, currency = ?, description = ?, "
                         "updated_at = datetime('now') WHERE id = ?",
                         {name, owner, currency, description, id});
-    if (r.is_ok())
-        SyncOutbox::record_unique("portfolio", id, "sync");
     return r;
 }
 
 Result<void> PortfolioRepository::delete_portfolio(const QString& id) {
     LOG_INFO("PortfolioRepo", QString("Deleting portfolio %1").arg(id));
     auto r = exec_write("DELETE FROM portfolios WHERE id = ?", {id});
-    if (r.is_ok())
-        SyncOutbox::record("portfolio", id, "delete");
     return r;
 }
 
@@ -163,7 +157,6 @@ Result<qint64> PortfolioRepository::add_asset(const QString& portfolio_id, const
                             {new_qty, new_avg, merged_sector, merged_broker_symbol, merged_exchange, asset.id});
         if (r.is_err())
             return Result<qint64>::err(r.error());
-        SyncOutbox::record_unique("portfolio", portfolio_id, "sync");
         return Result<qint64>::ok(static_cast<qint64>(asset.id));
     }
 
@@ -171,8 +164,6 @@ Result<qint64> PortfolioRepository::add_asset(const QString& portfolio_id, const
         exec_insert("INSERT INTO portfolio_assets (portfolio_id, symbol, quantity, avg_buy_price, first_purchase_date, "
                     "sector, broker_symbol, exchange) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     {portfolio_id, symbol.toUpper(), qty, price, purchase_date, sector, broker_symbol, exchange});
-    if (ins.is_ok())
-        SyncOutbox::record_unique("portfolio", portfolio_id, "sync");
     return ins;
 }
 
@@ -181,8 +172,6 @@ Result<void> PortfolioRepository::set_asset_sector(const QString& portfolio_id, 
     auto r = exec_write("UPDATE portfolio_assets SET sector = ? "
                         "WHERE portfolio_id = ? AND symbol = ?",
                         {sector, portfolio_id, symbol.toUpper()});
-    if (r.is_ok())
-        SyncOutbox::record_unique("portfolio", portfolio_id, "sync");
     return r;
 }
 
@@ -191,16 +180,12 @@ Result<void> PortfolioRepository::update_asset(const QString& portfolio_id, cons
     auto r = exec_write("UPDATE portfolio_assets SET quantity = ?, avg_buy_price = ?, "
                         "last_updated = datetime('now') WHERE portfolio_id = ? AND symbol = ?",
                         {qty, avg_price, portfolio_id, symbol.toUpper()});
-    if (r.is_ok())
-        SyncOutbox::record_unique("portfolio", portfolio_id, "sync");
     return r;
 }
 
 Result<void> PortfolioRepository::remove_asset(const QString& portfolio_id, const QString& symbol) {
     auto r = exec_write("DELETE FROM portfolio_assets WHERE portfolio_id = ? AND symbol = ?",
                         {portfolio_id, symbol.toUpper()});
-    if (r.is_ok())
-        SyncOutbox::record_unique("portfolio", portfolio_id, "sync");
     return r;
 }
 
@@ -236,7 +221,6 @@ Result<QString> PortfolioRepository::add_transaction(const QString& portfolio_id
                         {id, portfolio_id, symbol.toUpper(), type, qty, price, qty * price, date, notes});
     if (r.is_err())
         return Result<QString>::err(r.error());
-    SyncOutbox::record_unique("portfolio", portfolio_id, "sync");
     return Result<QString>::ok(id);
 }
 
@@ -245,25 +229,11 @@ Result<void> PortfolioRepository::update_transaction(const QString& id, double q
     auto r = exec_write("UPDATE portfolio_transactions SET quantity = ?, price = ?, total_value = ?, "
                         "transaction_date = ?, notes = ? WHERE id = ?",
                         {qty, price, qty * price, date, notes, id});
-    if (r.is_ok()) {
-        auto pr = db().execute("SELECT portfolio_id FROM portfolio_transactions WHERE id = ?", {id});
-        if (pr.is_ok() && pr.value().next())
-            SyncOutbox::record_unique("portfolio", pr.value().value(0).toString(), "sync");
-    }
     return r;
 }
 
 Result<void> PortfolioRepository::delete_transaction(const QString& id) {
-    QString pid; // resolve owning portfolio before the row is gone (for the sync marker)
-    {
-        auto pr = db().execute("SELECT portfolio_id FROM portfolio_transactions WHERE id = ?", {id});
-        if (pr.is_ok() && pr.value().next())
-            pid = pr.value().value(0).toString();
-    }
-    auto r = exec_write("DELETE FROM portfolio_transactions WHERE id = ?", {id});
-    if (r.is_ok() && !pid.isEmpty())
-        SyncOutbox::record_unique("portfolio", pid, "sync");
-    return r;
+    return exec_write("DELETE FROM portfolio_transactions WHERE id = ?", {id});
 }
 
 // ── Snapshots ────────────────────────────────────────────────────────────────
@@ -274,8 +244,6 @@ Result<void> PortfolioRepository::save_snapshot(const QString& portfolio_id, dou
                         "(portfolio_id, total_value, total_cost_basis, total_pnl, total_pnl_percent, snapshot_date) "
                         "VALUES (?, ?, ?, ?, ?, ?)",
                         {portfolio_id, value, cost_basis, pnl, pnl_pct, date});
-    if (r.is_ok())
-        SyncOutbox::record_unique("portfolio", portfolio_id, "sync");
     return r;
 }
 

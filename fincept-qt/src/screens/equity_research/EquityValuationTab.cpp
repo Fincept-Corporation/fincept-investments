@@ -1,7 +1,6 @@
 // src/screens/equity_research/EquityValuationTab.cpp
 #include "screens/equity_research/EquityValuationTab.h"
 
-#include "services/quantlib/QuantLibClient.h"
 #include "ui/theme/Theme.h"
 
 #include <QEvent>
@@ -17,6 +16,157 @@
 #include <cmath>
 
 namespace fincept::screens {
+
+namespace {
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Local valuation models
+//
+// These four scores used to be computed by the hosted /quantlib endpoints. They
+// are closed-form formulas over inputs the screen already assembles locally, so
+// they are evaluated in-process instead. Each returns the same JSON shape the
+// display_*_result() sinks already parse, so an unavailable input still renders
+// the existing "NO DATA" sentinel rather than a wrong number.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Safe ratio: returns NaN rather than ±inf when the denominator is unusable,
+/// so a missing input propagates to the NO-DATA sentinel instead of a verdict.
+double ratio(double num, double den) {
+    return (den != 0.0 && std::isfinite(num) && std::isfinite(den)) ? num / den : qQNaN();
+}
+
+/// Discounted cash flow (FCFF), Gordon-growth terminal value.
+QJsonObject compute_dcf(const QJsonObject& b) {
+    const double fcf = b.value("free_cash_flow").toDouble();
+    const double g = b.value("growth_rate").toDouble();
+    const double gt = b.value("terminal_growth_rate").toDouble();
+    const double r = b.value("discount_rate").toDouble();
+    const int years = b.value("projection_years").toInt();
+    const double shares = b.value("shares_outstanding").toDouble();
+
+    // on_calculate_clicked() already rejects r <= gt before dispatching, but
+    // this is the function that would divide by zero, so it re-checks.
+    if (!(shares > 0.0) || !(r > gt) || years <= 0 || !std::isfinite(fcf))
+        return {};
+
+    double pv = 0.0;
+    double cf = fcf;
+    for (int t = 1; t <= years; ++t) {
+        cf *= (1.0 + g);
+        pv += cf / std::pow(1.0 + r, t);
+    }
+    // cf is now FCF_n; the terminal value capitalises the following year.
+    const double terminal = (cf * (1.0 + gt)) / (r - gt);
+    pv += terminal / std::pow(1.0 + r, years);
+
+    const double per_share = pv / shares;
+    if (!std::isfinite(per_share))
+        return {};
+    return QJsonObject{{"intrinsic_value_per_share", per_share}};
+}
+
+/// Altman Z-score, the original public-manufacturing weighting.
+QJsonObject compute_altman_z(const QJsonObject& b) {
+    const double ta = b.value("total_assets").toDouble();
+    const double tl = b.value("total_liabilities").toDouble();
+    const double x1 = ratio(b.value("working_capital").toDouble(), ta);
+    const double x2 = ratio(b.value("retained_earnings").toDouble(), ta);
+    const double x3 = ratio(b.value("ebit").toDouble(), ta);
+    const double x4 = ratio(b.value("market_cap").toDouble(), tl);
+    const double x5 = ratio(b.value("revenue").toDouble(), ta);
+
+    const double z = 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5;
+    if (!std::isfinite(z))
+        return {};
+    return QJsonObject{{"z_score", z}};
+}
+
+/// Piotroski F-score. Eight of the nine classic tests are computable from the
+/// data this screen loads; the share-issuance test compares this year's share
+/// count against itself (yfinance exposes only the current figure), so it
+/// always passes — the same behaviour the hosted endpoint had, since the
+/// caller sent it identical values for both periods.
+QJsonObject compute_piotroski_f(const QJsonObject& b) {
+    const double ta = b.value("total_assets").toDouble();
+    const double prev_ta = b.value("prev_total_assets").toDouble();
+    const double ni = b.value("net_income").toDouble();
+    const double prev_ni = b.value("prev_net_income").toDouble();
+    const double cfo = b.value("operating_cashflow").toDouble();
+    if (!(ta > 0.0) || !(prev_ta > 0.0))
+        return {};
+
+    const double roa = ni / ta;
+    const double prev_roa = prev_ni / prev_ta;
+    const double prev_current_ratio =
+        ratio(b.value("prev_current_assets").toDouble(), b.value("prev_current_liabilities").toDouble());
+    const double gm = ratio(b.value("gross_profit").toDouble(), b.value("revenue").toDouble());
+    const double prev_gm = ratio(b.value("prev_gross_profit").toDouble(), b.value("prev_revenue").toDouble());
+
+    int f = 0;
+    f += (roa > 0.0) ? 1 : 0;                                                     // 1. profitability
+    f += (cfo > 0.0) ? 1 : 0;                                                     // 2. operating cash flow
+    f += (roa > prev_roa) ? 1 : 0;                                                // 3. rising ROA
+    f += (cfo > ni) ? 1 : 0;                                                      // 4. accrual quality
+    f += (ratio(b.value("long_term_debt").toDouble(), ta) <
+          ratio(b.value("prev_long_term_debt").toDouble(), prev_ta))              // 5. falling leverage
+             ? 1
+             : 0;
+    f += (b.value("current_ratio").toDouble() > prev_current_ratio) ? 1 : 0;      // 6. rising liquidity
+    f += (b.value("shares_outstanding").toDouble() <=
+          b.value("prev_shares_outstanding").toDouble())                          // 7. no dilution
+             ? 1
+             : 0;
+    f += (std::isfinite(gm) && std::isfinite(prev_gm) && gm > prev_gm) ? 1 : 0;   // 8. rising gross margin
+    f += (ratio(b.value("revenue").toDouble(), ta) >
+          ratio(b.value("prev_revenue").toDouble(), prev_ta))                     // 9. rising asset turnover
+             ? 1
+             : 0;
+
+    return QJsonObject{{"f_score", f}};
+}
+
+/// Beneish M-score.
+///
+/// Six of the eight indices come from data this screen loads. DEPI
+/// (depreciation) and SGAI (SG&A expense) are not in the statement subset
+/// yfinance returns here, so both are held at their neutral value of 1.0 —
+/// their combined weight is -0.057, so the effect on the verdict threshold is
+/// negligible compared to TATA (4.679) and SGI (0.892), which are computed.
+QJsonObject compute_beneish_m(const QJsonObject& b) {
+    const double rev = b.value("revenue").toDouble();
+    const double prev_rev = b.value("prev_revenue").toDouble();
+    const double ta = b.value("total_assets").toDouble();
+    const double prev_ta = b.value("prev_total_assets").toDouble();
+    if (!(rev > 0.0) || !(prev_rev > 0.0) || !(ta > 0.0) || !(prev_ta > 0.0))
+        return {};
+
+    const double dsri = ratio(ratio(b.value("receivables").toDouble(), rev),
+                              ratio(b.value("prev_receivables").toDouble(), prev_rev));
+    const double gmi = ratio(ratio(b.value("prev_gross_profit").toDouble(), prev_rev),
+                             ratio(b.value("gross_profit").toDouble(), rev));
+    const double soft = 1.0 - (b.value("current_assets").toDouble() + b.value("ppe").toDouble()) / ta;
+    const double prev_soft = 1.0 - (b.value("prev_current_assets").toDouble() + b.value("prev_ppe").toDouble()) / prev_ta;
+    const double aqi = ratio(soft, prev_soft);
+    const double sgi = rev / prev_rev;
+    const double depi = 1.0; // not computable from the loaded statements
+    const double sgai = 1.0; // not computable from the loaded statements
+    const double lvgi = ratio(ratio(b.value("long_term_debt").toDouble(), ta),
+                              ratio(b.value("prev_long_term_debt").toDouble(), prev_ta));
+    const double tata = (b.value("net_income").toDouble() - b.value("operating_cashflow").toDouble()) / ta;
+
+    // An index whose inputs were missing contributes nothing rather than
+    // poisoning the whole score with NaN.
+    auto term = [](double coeff, double index) { return std::isfinite(index) ? coeff * index : 0.0; };
+
+    const double m = -4.84 + term(0.920, dsri) + term(0.528, gmi) + term(0.404, aqi) + term(0.892, sgi) +
+                     term(0.115, depi) - term(0.172, sgai) + term(4.679, tata) - term(0.327, lvgi);
+    if (!std::isfinite(m))
+        return {};
+    return QJsonObject{{"m_score", m}};
+}
+
+} // namespace
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Construction
@@ -353,19 +503,9 @@ void EquityValuationTab::on_calculate_clicked() {
     dcf_body["projection_years"] = static_cast<int>(years_input_->value());
     dcf_body["shares_outstanding"] = shares_input_->value() * 1e6;
 
-    QPointer<EquityValuationTab> self = this;
-    services::QuantLibClient::instance().call("analysis/valuation/dcf/fcff", dcf_body, [self](mcp::ToolResult result) {
-        if (!self)
-            return;
-        self->calc_btn_->setEnabled(true);
-        self->calc_btn_->setText(tr("CALCULATE"));
-        if (!result.success) {
-            if (self->intrinsic_val_)
-                self->intrinsic_val_->setText(tr("API error"));
-            return;
-        }
-        self->display_dcf_result(result.data);
-    });
+    calc_btn_->setEnabled(true);
+    calc_btn_->setText(tr("CALCULATE"));
+    display_dcf_result(compute_dcf(dcf_body));
 
     // ── 2. Scoring (only if financials loaded) ─────────────────────
     if (financials_loaded_)
@@ -397,12 +537,10 @@ void EquityValuationTab::run_scoring_models() {
                                                                             : get_stmt_val(bs, "Working Capital");
 
     // ── Altman Z ─────────────────────────────────────────────────
-    QPointer<EquityValuationTab> self = this;
-
     // Four of Altman's five ratios divide by total assets and the fifth by total
-    // liabilities. With an empty balance sheet every input here is 0, and asking
-    // the endpoint anyway yields a score that describes nothing — which then
-    // rendered as a red "DISTRESS ZONE". Don't ask; say so instead.
+    // liabilities. With an empty balance sheet every input here is 0, and scoring
+    // anyway yields a number that describes nothing — which then rendered as a red
+    // "DISTRESS ZONE". Don't score; say so instead.
     if (total_assets > 0.0 && total_liabilities > 0.0) {
         QJsonObject altman_body;
         altman_body["working_capital"] = working_capital;
@@ -413,14 +551,9 @@ void EquityValuationTab::run_scoring_models() {
         altman_body["total_liabilities"] = total_liabilities;
         altman_body["revenue"] = revenue;
 
-        services::QuantLibClient::instance().call("analysis/valuation/predictive/altman-z", altman_body,
-                                                  [self](mcp::ToolResult r) {
-                                                      if (!self)
-                                                          return;
-                                                      // An empty value renders "NO DATA" — a failed call must not
-                                                      // leave a stale verdict from the previously viewed symbol.
-                                                      self->display_altman_result(r.success ? r.data : QJsonValue());
-                                                  });
+        // An empty object renders "NO DATA" — an uncomputable score must not
+        // leave a stale verdict from the previously viewed symbol.
+        display_altman_result(compute_altman_z(altman_body));
     } else {
         display_altman_result(QJsonValue());
     }
@@ -445,13 +578,9 @@ void EquityValuationTab::run_scoring_models() {
         pio_body["prev_shares_outstanding"] = last_info_.shares_outstanding;
         pio_body["prev_gross_profit"] = get_stmt_val(is, "Gross Profit", 1);
         pio_body["prev_revenue"] = get_stmt_val(is, "Total Revenue", 1);
+        pio_body["prev_net_income"] = get_stmt_val(is, "Net Income", 1);
 
-        services::QuantLibClient::instance().call("analysis/valuation/predictive/piotroski-f", pio_body,
-                                                  [self](mcp::ToolResult r) {
-                                                      if (!self || !r.success)
-                                                          return;
-                                                      self->display_piotroski_result(r.data);
-                                                  });
+        display_piotroski_result(compute_piotroski_f(pio_body));
     }
 
     // ── Beneish M ────────────────────────────────────────────────
@@ -475,12 +604,7 @@ void EquityValuationTab::run_scoring_models() {
         ben_body["prev_net_income"] = get_stmt_val(is, "Net Income", 1);
         ben_body["operating_cashflow"] = get_stmt_val(cf, "Operating Cash Flow");
 
-        services::QuantLibClient::instance().call("analysis/valuation/predictive/beneish-m", ben_body,
-                                                  [self](mcp::ToolResult r) {
-                                                      if (!self || !r.success)
-                                                          return;
-                                                      self->display_beneish_result(r.data);
-                                                  });
+        display_beneish_result(compute_beneish_m(ben_body));
     }
 }
 
@@ -525,7 +649,6 @@ void EquityValuationTab::run_multiples() {
 
 void EquityValuationTab::display_dcf_result(const QJsonValue& data) {
     auto obj = data.toObject();
-    // Try common response key names from QuantLib API
     double intrinsic = obj.value("intrinsic_value_per_share").toDouble(0.0);
     if (intrinsic == 0.0)
         intrinsic = obj.value("intrinsic_value").toDouble(0.0);

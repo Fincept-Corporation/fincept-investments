@@ -1,7 +1,6 @@
 // src/storage/repositories/ScanWatchRepository.cpp
 #include "storage/repositories/ScanWatchRepository.h"
 
-#include "storage/sync/SyncOutbox.h"
 
 #include <QDateTime>
 #include <QJsonDocument>
@@ -88,7 +87,6 @@ Result<ScanWatch> ScanWatchRepository::create(const ScanWatch& in) {
                          now});
     if (r.is_err())
         return Result<ScanWatch>::err(r.error());
-    SyncOutbox::record("scan_watch", w.id, "create");
     return get(w.id);
 }
 
@@ -101,23 +99,17 @@ Result<void> ScanWatchRepository::update(const ScanWatch& w) {
                          nn(w.timeframe), w.lookback_days, nn(w.data_source), nn(w.broker_id), nn(w.account_id),
                          nn(w.mode), w.interval_sec, w.cooldown_min, nn(json_obj_to_str(w.actions)), w.active ? 1 : 0,
                          nn(w.universe), now, nn(w.id)});
-    if (r.is_ok())
-        SyncOutbox::record("scan_watch", w.id, "update");
     return r;
 }
 
 Result<void> ScanWatchRepository::remove(const QString& id) {
     auto r = exec_write("DELETE FROM scan_watches WHERE id=?", {id});
-    if (r.is_ok())
-        SyncOutbox::record("scan_watch", id, "delete");
     return r;
 }
 
 Result<void> ScanWatchRepository::set_active(const QString& id, bool active) {
     auto r = exec_write("UPDATE scan_watches SET active=?, updated_at=? WHERE id=?",
                         {active ? 1 : 0, QDateTime::currentMSecsSinceEpoch(), id});
-    if (r.is_ok())
-        SyncOutbox::record("scan_watch", id, "update");
     return r;
 }
 

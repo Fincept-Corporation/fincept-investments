@@ -235,8 +235,8 @@ QWidget* ContactScreen::build_page() {
             QString a;
         };
         const Issue issues[] = {
-            {tr("Cannot log in or forgot password"),
-             tr("Use the Forgot Password option on the login screen, or contact support@fincept.in")},
+            {tr("A broker or exchange connection is rejected"),
+             tr("Re-enter the credentials in Settings → Credentials, or contact support@fincept.in")},
             {tr("Python setup fails or times out"),
              tr("Ensure you have a stable internet connection. Retry setup or check firewall settings.")},
             {tr("Data not loading or showing stale"),

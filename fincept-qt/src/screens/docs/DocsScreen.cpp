@@ -269,7 +269,6 @@ void DocsScreen::build_sidebar() {
     // ── AI & Quantitative ────────────────────────────────────────────────────
     auto* ai = add_category(tr("AI & QUANTITATIVE"));
     add_item(ai, tr("AI Quant Lab"), "ai_quant_lab");
-    add_item(ai, tr("QuantLib Suite"), "quantlib");
     add_item(ai, tr("AI Chat"), "ai_chat");
     add_item(ai, tr("Agent Studio"), "agent_config");
     add_item(ai, tr("Alpha Arena"), "alpha_arena");
@@ -301,7 +300,6 @@ void DocsScreen::build_sidebar() {
     // ── Account ──────────────────────────────────────────────────────────────
     auto* account = add_category(tr("ACCOUNT"));
     add_item(account, tr("Settings"), "settings");
-    add_item(account, tr("Profile"), "profile");
 
     // Navigation
     connect(sidebar_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem* current, QTreeWidgetItem*) {
@@ -353,7 +351,6 @@ void DocsScreen::build_content_pages() {
 
     // AI
     add("ai_quant_lab", page_ai_quant_lab());
-    add("quantlib", page_quantlib());
     add("ai_chat", page_ai_chat());
     add("agent_config", page_agent_config());
     add("alpha_arena", page_alpha_arena());
@@ -381,7 +378,6 @@ void DocsScreen::build_content_pages() {
 
     // Account
     add("settings", page_settings());
-    add("profile", page_profile());
 }
 
 void DocsScreen::navigate_to(const QString& section_id) {

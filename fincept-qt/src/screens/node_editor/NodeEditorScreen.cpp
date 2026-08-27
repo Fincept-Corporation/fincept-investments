@@ -13,7 +13,6 @@
 #include "screens/node_editor/properties/NodePropertiesPanel.h"
 #include "screens/node_editor/toolbar/DeployDialog.h"
 #include "screens/node_editor/toolbar/NodeEditorToolbar.h"
-#include "services/cloud/CloudSyncEngine.h"
 #include "services/workflow/NodeRegistry.h"
 #include "services/workflow/WorkflowService.h"
 #include "ui/theme/Theme.h"
@@ -56,8 +55,6 @@ void NodeEditorScreen::showEvent(QShowEvent* event) {
     QApplication::style()->polish(this);
 
     auto_save_timer_->start();
-    // Rate-gated pull of cloud workflows on screen entry (no-op when sync is off).
-    fincept::services::cloud::CloudSyncEngine::instance().request_pull(QStringLiteral("workflow"));
     if (minimap_)
         minimap_->start_tracking();
     // Resume edge animations if execution is in progress

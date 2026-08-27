@@ -542,9 +542,6 @@ namespace {
 // Retention windows. Deliberately generous — these tables exist for forensics.
 constexpr int kAuditLogRetentionDays = 90;
 constexpr int kTelemetryRetentionDays = 30;
-// A push that has failed this many times is never going to succeed; the row is
-// dead-lettered rather than retried forever. `bump_attempt` has no other bound.
-constexpr int kOutboxMaxAttempts = 20;
 } // namespace
 
 int StorageManager::prune_main_db(const QString& table, const QString& where, const QVariantList& params) {
@@ -608,16 +605,6 @@ Result<void> StorageManager::prune_all() {
         LOG_INFO("StorageManager", QString("Retention: removed %1 workflow_audit_log rows older than %2 days")
                                        .arg(audit)
                                        .arg(kAuditLogRetentionDays));
-    }
-
-    // sync_outbox — rows leave only via mark_done(); a permanently failing push
-    // was retried forever with no ceiling.
-    const int outbox = prune_main_db("sync_outbox", "attempts > ?", {kOutboxMaxAttempts});
-    if (outbox > 0) {
-        total += outbox;
-        LOG_WARN("StorageManager", QString("Retention: dead-lettered %1 sync_outbox rows past %2 push attempts")
-                                       .arg(outbox)
-                                       .arg(kOutboxMaxAttempts));
     }
 
     // unified_cache (cache.db) — was swept once at startup only, so a terminal

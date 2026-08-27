@@ -8,13 +8,11 @@
 
 namespace fincept {
 
-// Storage key format: "key.refresh", "key.toggle_chat", etc.
+// Storage key format: "key.refresh", "key.focus_mode", etc.
 static QString storage_key(KeyAction a) {
     switch (a) {
         case KeyAction::Refresh:
             return "key.refresh";
-        case KeyAction::ToggleChat:
-            return "key.toggle_chat";
         case KeyAction::FocusMode:
             return "key.focus_mode";
         case KeyAction::Fullscreen:
@@ -95,8 +93,6 @@ static QString storage_key(KeyAction a) {
             return "key.browse_components";
         case KeyAction::ToggleAlwaysOnTop:
             return "key.toggle_always_on_top";
-        case KeyAction::LockNow:
-            return "key.lock_now";
     }
     return {};
 }
@@ -104,7 +100,6 @@ static QString storage_key(KeyAction a) {
 KeyConfigManager::KeyConfigManager() {
     // Define defaults
     defaults_[KeyAction::Refresh] = QKeySequence(Qt::Key_F5);
-    defaults_[KeyAction::ToggleChat] = QKeySequence(Qt::Key_F9);
     defaults_[KeyAction::FocusMode] = QKeySequence(Qt::Key_F10);
     defaults_[KeyAction::Fullscreen] = QKeySequence(Qt::Key_F11);
     defaults_[KeyAction::Screenshot] = QKeySequence(Qt::CTRL | Qt::Key_P);
@@ -154,10 +149,6 @@ KeyConfigManager::KeyConfigManager() {
     // Phase 11 — Always-on-top window toggle. Ctrl+Shift+T is un-used by any
     // existing binding in this project and is a common convention for "top".
     defaults_[KeyAction::ToggleAlwaysOnTop] = QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_T);
-
-    // Phase 12 — Manual lock. Ctrl+L is the most common "lock" binding across
-    // terminal / Fincept workflows. Users can rebind in Settings.
-    defaults_[KeyAction::LockNow] = QKeySequence(Qt::CTRL | Qt::Key_L);
 
     // Create QActions with default sequences
     for (auto it = defaults_.begin(); it != defaults_.end(); ++it) {
@@ -215,8 +206,6 @@ QString KeyConfigManager::display_name(KeyAction a) const {
     switch (a) {
         case KeyAction::Refresh:
             return "Refresh Screen";
-        case KeyAction::ToggleChat:
-            return "Toggle Chat";
         case KeyAction::FocusMode:
             return "Focus Mode";
         case KeyAction::Fullscreen:
@@ -297,8 +286,6 @@ QString KeyConfigManager::display_name(KeyAction a) const {
             return "Browse Components";
         case KeyAction::ToggleAlwaysOnTop:
             return "Toggle Always-on-Top";
-        case KeyAction::LockNow:
-            return "Lock Terminal Now";
     }
     return {};
 }
@@ -306,7 +293,6 @@ QString KeyConfigManager::display_name(KeyAction a) const {
 QString KeyConfigManager::group_name(KeyAction a) const {
     switch (a) {
         case KeyAction::Refresh:
-        case KeyAction::ToggleChat:
         case KeyAction::FocusMode:
         case KeyAction::Fullscreen:
         case KeyAction::Screenshot:
@@ -353,7 +339,6 @@ QString KeyConfigManager::group_name(KeyAction a) const {
 
         case KeyAction::BrowseComponents:
         case KeyAction::ToggleAlwaysOnTop:
-        case KeyAction::LockNow:
             return "Global";
     }
     return {};
@@ -362,7 +347,6 @@ QString KeyConfigManager::group_name(KeyAction a) const {
 QList<KeyAction> KeyConfigManager::all_actions() const {
     return {
         KeyAction::Refresh,
-        KeyAction::ToggleChat,
         KeyAction::FocusMode,
         KeyAction::Fullscreen,
         KeyAction::Screenshot,
@@ -402,7 +386,6 @@ QList<KeyAction> KeyConfigManager::all_actions() const {
         KeyAction::MoveWindowToMonitor9,
         KeyAction::BrowseComponents,
         KeyAction::ToggleAlwaysOnTop,
-        KeyAction::LockNow,
     };
 }
 

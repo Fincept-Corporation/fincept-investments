@@ -19,8 +19,6 @@ class HelpScreen : public QWidget {
 
   signals:
     void navigate_back();
-    void navigate_register();
-    void navigate_forgot_password();
 
   protected:
     void changeEvent(QEvent* event) override;

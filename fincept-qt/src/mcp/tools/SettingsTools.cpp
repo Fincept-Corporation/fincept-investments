@@ -47,7 +47,6 @@ std::vector<ToolDef> get_settings_tools() {
         t.description = "Set an application setting.";
         t.category = "settings";
         // Phase 6.3: mutates persisted state (could touch API keys / billing).
-        t.auth_required = AuthLevel::Authenticated;
         t.is_destructive = true;
         t.input_schema.properties = QJsonObject{
             {"key", QJsonObject{{"type", "string"}, {"description", "Setting key"}}},
@@ -132,12 +131,11 @@ std::vector<ToolDef> get_settings_tools() {
         t.category = "settings";
         // Phase 6.3: switching LLM provider mid-conversation is surprising;
         // requires explicit confirmation.
-        t.auth_required = AuthLevel::Authenticated;
         t.is_destructive = true;
         t.input_schema = ToolSchemaBuilder()
-                             .string("provider", "Provider id (openai, anthropic, ollama, groq, google, fincept)")
+                             .string("provider", "Provider id (openai, anthropic, ollama, groq, google)")
                              .required()
-                             .enums({"openai", "anthropic", "ollama", "groq", "google", "fincept"})
+                             .enums({"openai", "anthropic", "ollama", "groq", "google"})
                              .build();
         t.handler = [](const QJsonObject& args) -> ToolResult {
             QString provider = args["provider"].toString();

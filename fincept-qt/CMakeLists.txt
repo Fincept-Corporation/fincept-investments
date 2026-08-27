@@ -876,7 +876,6 @@ set(CORE_SOURCES
 # Network
 set(NETWORK_SOURCES
     src/network/http/HttpClient.cpp
-    src/network/cloud/CloudClient.cpp
 )
 # WebSocketClient is always compiled; it stubs out when HAS_QT_WEBSOCKETS is not defined
 list(APPEND NETWORK_SOURCES src/network/websocket/WebSocketClient.cpp)
@@ -890,17 +889,6 @@ set(DATAHUB_SOURCES
 )
 
 # Auth
-set(AUTH_SOURCES
-    src/auth/AuthManager.cpp
-    src/auth/AuthApi.cpp
-    src/auth/GoogleDesktopLogin.cpp
-    src/auth/UserApi.cpp
-    src/auth/SessionGuard.cpp
-    src/auth/PinManager.cpp
-    src/auth/InactivityGuard.cpp
-    src/auth/SecurityAuditLog.cpp
-    src/auth/lock/LockOverlayController.cpp
-)
 
 # Storage
 set(STORAGE_SOURCES
@@ -1028,14 +1016,12 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v049_order_baskets.cpp
     src/storage/sqlite/migrations/v050_alpha_arena_rewrite.cpp
     src/storage/sqlite/migrations/v051_drop_duplicate_indexes.cpp
+    src/storage/sqlite/migrations/v052_drop_auth_tables.cpp
 
     # Historical OHLCV data store (Historify, Phase 3 §13)
     src/storage/HistoricalDataStore.cpp
 
     # Cloud sync — durable outbox + device-local flags + id map (see CLOUD_SYNC_PLAN.md)
-    src/storage/sync/SyncOutbox.cpp
-    src/storage/sync/CloudSyncSettings.cpp
-    src/storage/sync/SyncMap.cpp
 )
 
 # Python runner
@@ -1053,7 +1039,6 @@ set(LLM_SERVICE_SOURCES
     src/services/llm/LlmHttpHelpers.cpp
     src/services/llm/LlmRequestBuilders.cpp
     src/services/llm/LlmModelsApi.cpp
-    src/services/llm/LlmFinceptAsync.cpp
     src/services/llm/LlmToolLoop.cpp
     src/services/llm/ModelCatalog.cpp
     src/services/llm/ProviderCatalog.cpp
@@ -1106,8 +1091,6 @@ set(MCP_SOURCES
     src/mcp/tools/MAAnalyticsTools.cpp
     src/mcp/tools/AltInvestmentsTools.cpp
     src/mcp/tools/DataSourcesTools.cpp
-    src/mcp/tools/ForumTools.cpp
-    src/mcp/tools/ProfileTools.cpp
     src/mcp/tools/SettingsTools.cpp
     src/mcp/tools/PythonTools.cpp
     src/mcp/tools/SystemTools.cpp
@@ -1271,18 +1254,6 @@ set(ALGO_ENGINE_SOURCES
 # Services
 set(SERVICE_SOURCES
     # Fincept Cloud sync orchestrator + domain adapters (see CLOUD_SYNC_PLAN.md)
-    src/services/cloud/CloudSyncEngine.cpp
-    src/services/cloud/WatchlistCloudAdapter.cpp
-    src/services/cloud/NotesCloudAdapter.cpp
-    src/services/cloud/PortfolioCloudAdapter.cpp
-    src/services/cloud/AgentConfigCloudAdapter.cpp
-    src/services/cloud/ReportCloudAdapter.cpp
-    src/services/cloud/WorkflowCloudAdapter.cpp
-    src/services/cloud/DashboardCloudAdapter.cpp
-    src/services/cloud/SettingsCloudAdapter.cpp
-    src/services/cloud/NewsMonitorCloudAdapter.cpp
-    src/services/cloud/NewsFeedCloudAdapter.cpp
-    src/services/cloud/NotebookCloudAdapter.cpp
     src/services/akshare/AkShareService.cpp
     src/services/alpha_arena/ArenaStore.cpp
     src/services/alpha_arena/ArenaIndicators.cpp
@@ -1349,7 +1320,6 @@ set(SERVICE_SOURCES
     src/services/portfolio/PortfolioService_Metrics.cpp
     src/services/portfolio/PortfolioService_ImportExport.cpp
     src/services/portfolio/PortfolioAnalyticsService.cpp
-    src/services/quantlib/QuantLibClient.cpp
     src/services/economics/EconomicsService.cpp
     src/services/economics/MacroCalendarService.cpp
     # AgentService is split across multiple files; see AgentService.cpp header.
@@ -1510,7 +1480,6 @@ set(UI_SOURCES
     src/ui/charts/layers/SupportResistanceLayer.cpp
     src/ui/charts/layers/PivotLayer.cpp
     src/ui/charts/KLineChartWidget.cpp
-    src/ui/navigation/NavigationBar.cpp
     src/ui/navigation/FKeyBar.cpp
     src/ui/navigation/StatusBar.cpp
     src/ui/navigation/ToolBar.cpp
@@ -1552,17 +1521,10 @@ set(UI_SOURCES
 
 # Screens
 set(SCREEN_SOURCES
-    src/screens/auth/LoginScreen.cpp
-    src/screens/auth/RegisterScreen.cpp
-    src/screens/auth/ForgotPasswordScreen.cpp
-    src/screens/auth/PricingScreen.cpp
-    src/screens/auth/LockScreen.cpp
     src/screens/devtools/DataHubInspector.cpp
-    src/screens/profile/ProfileScreen.cpp
     src/screens/settings/SettingsScreen.cpp
     src/screens/settings/CredentialsSection.cpp
     src/screens/settings/AppearanceSection.cpp
-    src/screens/settings/CloudSyncSection.cpp
     src/screens/settings/GeneralSection.cpp
     src/screens/settings/NotificationsSection.cpp
     src/screens/settings/StorageSection.cpp
@@ -1579,9 +1541,6 @@ set(SCREEN_SOURCES
     src/screens/settings/DeveloperSection.cpp
     src/screens/settings/VoiceConfigSection.cpp
     src/screens/about/AboutScreen.cpp
-    src/screens/support/SupportScreen.cpp
-    src/screens/support/SupportScreen_Layout.cpp
-    src/screens/support/SupportScreen_Actions.cpp
     src/screens/trade_viz/TradeVizScreen.cpp
     # DocsScreen split into pages files; see DocsScreen.cpp header.
     src/screens/docs/DocsScreen.cpp
@@ -1590,12 +1549,6 @@ set(SCREEN_SOURCES
     src/screens/docs/DocsScreen_Pages_Trading.cpp
     src/screens/docs/DocsScreen_Pages_Data.cpp
     src/screens/common/ComingSoonScreen.cpp
-    src/screens/chat_mode/ChatModeService.cpp
-    src/screens/chat_mode/ChatSessionPanel.cpp
-    src/screens/chat_mode/ChatMessagePanel.cpp
-    src/screens/chat_mode/ChatAgentPanel.cpp
-    src/screens/chat_mode/ChatModeScreen.cpp
-    src/screens/chat_mode/TerminalToolBridge.cpp
     src/screens/setup/SetupScreen.cpp
     src/screens/launchpad/LaunchpadScreen.cpp
     src/screens/launchpad/OnboardingTour.cpp
@@ -1678,11 +1631,6 @@ set(SCREEN_SOURCES
     src/screens/news/NewsTickerStrip.cpp
     src/screens/news/dialogs/RssFeedManagerDialog.cpp
     src/screens/news/dialogs/RssFeedEditDialog.cpp
-    src/screens/forum/ForumScreen.cpp
-    src/screens/forum/ForumFeedPanel.cpp
-    src/screens/forum/ForumSidebarPanel.cpp
-    src/screens/forum/ForumThreadPanel.cpp
-    src/services/forum/ForumService.cpp
     # CryptoTradingScreen split; see header comment.
     src/screens/crypto_trading/CryptoTradingScreen.cpp
     src/screens/crypto_trading/CryptoTradingScreen_Handlers.cpp
@@ -1951,8 +1899,6 @@ set(SCREEN_SOURCES
     src/screens/mcp_servers/McpServersScreen_Actions.cpp
 
     # QuantLib Suite — endpoint catalogs split out; see header comment.
-    src/screens/quantlib/QuantLibScreen.cpp
-    src/screens/quantlib/QuantLibScreen_Data.cpp
 
     # M&A Analytics
     src/screens/ma_analytics/MAAnalyticsScreen.cpp
@@ -2072,7 +2018,6 @@ set(APP_SOURCES
     # SKIP_UNITY_BUILD_INCLUSION block below).
     src/app/WindowFrame.cpp
     src/app/WindowFrame_Setup.cpp
-    src/app/WindowFrame_Auth.cpp
     src/app/WindowFrame_Layout.cpp
     src/app/WindowFrame_Actions.cpp
     # DockScreenRouter split; see DockScreenRouter.cpp header.
@@ -2150,11 +2095,6 @@ set_source_files_properties(
     src/screens/alt_investments/AltInvestmentsScreen_Layout.cpp
     src/screens/alt_investments/AltInvestmentsScreen_Analysis.cpp
     src/screens/asia_markets/AsiaMarketsScreen.cpp
-    src/screens/auth/ForgotPasswordScreen.cpp
-    src/screens/auth/LockScreen.cpp
-    src/screens/auth/LoginScreen.cpp
-    src/screens/auth/PricingScreen.cpp
-    src/screens/auth/RegisterScreen.cpp
     src/screens/backtesting/BacktestingScreen.cpp
     src/screens/backtesting/BacktestingScreen_Layout.cpp
     src/screens/backtesting/BacktestingScreen_Commands.cpp
@@ -2343,10 +2283,6 @@ set_source_files_properties(
     src/screens/excel/ExcelScreen.cpp
     src/screens/excel/SpreadsheetWidget.cpp
     src/screens/file_manager/FileManagerScreen.cpp
-    src/screens/forum/ForumFeedPanel.cpp
-    src/screens/forum/ForumScreen.cpp
-    src/screens/forum/ForumSidebarPanel.cpp
-    src/screens/forum/ForumThreadPanel.cpp
     src/screens/geopolitics/ConflictMonitorPanel.cpp
     src/screens/geopolitics/GeopoliticsScreen.cpp
     src/screens/geopolitics/HDXDataPanel.cpp
@@ -2436,7 +2372,6 @@ set_source_files_properties(
     src/screens/portfolio/views/QuantStatsView.cpp
     src/screens/portfolio/views/ReportsView.cpp
     src/screens/portfolio/views/RiskManagementView.cpp
-    src/screens/profile/ProfileScreen.cpp
     src/screens/relationship_map/RelationshipGraphScene.cpp
     src/screens/relationship_map/RelationshipMapScreen.cpp
     src/screens/report_builder/ComponentToolbar.cpp
@@ -2466,7 +2401,6 @@ set_source_files_properties(
     src/screens/launchpad/LaunchpadScreen.cpp
     src/screens/launchpad/OnboardingTour.cpp
     src/screens/recovery/CrashRecoveryDialog.cpp
-    src/screens/support/SupportScreen.cpp
     src/screens/surface_analytics/Surface3DWidget.cpp
     src/screens/surface_analytics/SurfaceAnalyticsScreen.cpp
     src/screens/surface_analytics/SurfaceAnalyticsScreen_Layout.cpp
@@ -2560,6 +2494,8 @@ set_source_files_properties(
     # re-batches every source after it — which can collide two files that were
     # previously fine, and only on the unity-ON release/CI presets.
     src/storage/sqlite/migrations/v051_drop_duplicate_indexes.cpp
+    # v052: same reasoning as v051; its helper is deliberately named sql_v052.
+    src/storage/sqlite/migrations/v052_drop_auth_tables.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp
@@ -2573,12 +2509,6 @@ set_source_files_properties(
     src/screens/polymarket/PolymarketStatusBar.cpp
     src/screens/polymarket/PredictionAccountDialog.cpp
     src/screens/polymarket/PolymarketOrderBlotter.cpp
-    src/screens/chat_mode/ChatAgentPanel.cpp
-    src/screens/chat_mode/ChatModeScreen.cpp
-    src/screens/chat_mode/ChatModeService.cpp
-    src/screens/chat_mode/TerminalToolBridge.cpp
-    src/screens/quantlib/QuantLibScreen.cpp
-    src/screens/quantlib/QuantLibScreen_Data.cpp
     src/trading/brokers/BrokerHttp.cpp
     src/trading/websocket/ZerodhaWebSocket.cpp
     src/trading/websocket/AngelOneWebSocket.cpp
@@ -2618,7 +2548,6 @@ set_source_files_properties(
 set_source_files_properties(
     src/app/WindowFrame.cpp
     src/app/WindowFrame_Setup.cpp
-    src/app/WindowFrame_Auth.cpp
     src/app/WindowFrame_Layout.cpp
     src/app/WindowFrame_Actions.cpp
     src/app/DockScreenRouter.cpp
@@ -2682,8 +2611,6 @@ set_source_files_properties(
     src/mcp/tools/MAAnalyticsTools.cpp
     src/mcp/tools/AltInvestmentsTools.cpp
     src/mcp/tools/DataSourcesTools.cpp
-    src/mcp/tools/ForumTools.cpp
-    src/mcp/tools/ProfileTools.cpp
     src/mcp/tools/SettingsTools.cpp
     src/mcp/tools/PythonTools.cpp
     src/mcp/tools/SystemTools.cpp
@@ -2871,7 +2798,6 @@ add_executable(FinceptTerminal ${_FINCEPT_EXE_FLAGS}
     ${CORE_SOURCES}
     ${NETWORK_SOURCES}
     ${DATAHUB_SOURCES}
-    ${AUTH_SOURCES}
     ${STORAGE_SOURCES}
     ${PYTHON_SOURCES}
     ${LLM_SERVICE_SOURCES}

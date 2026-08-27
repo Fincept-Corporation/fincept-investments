@@ -325,43 +325,6 @@ QWidget* DocsScreen::page_ai_quant_lab() {
         });
 }
 
-QWidget* DocsScreen::page_quantlib() {
-    return make_page(
-        tr("QUANTLIB SUITE"), tr("18 quantitative analysis modules with 590+ endpoints"),
-        {
-            {tr("OVERVIEW"), tr("The QuantLib Suite provides access to 590+ quantitative analysis endpoints organized "
-                                "into 18 modules. Powered by a REST API backend, it covers everything from basic "
-                                "statistics to complex derivative pricing and risk modeling.")},
-            {tr("MODULES (18)"), tr("■  Core — Fundamental quantitative operations\n"
-                                    "■  Analysis — Statistical analysis and hypothesis testing\n"
-                                    "■  Curves — Yield curves, forward curves, discount factors\n"
-                                    "■  Economics — Macro modeling, GDP, inflation, employment\n"
-                                    "■  Instruments — Bond, swap, option, futures pricing\n"
-                                    "■  ML — Machine learning models for finance\n"
-                                    "■  Models — Interest rate models (Hull-White, HJM, LMM)\n"
-                                    "■  Numerical — Numerical methods, PDE solvers, Monte Carlo\n"
-                                    "■  Physics — Physics-inspired financial models\n"
-                                    "■  Portfolio — Portfolio optimization, efficient frontier\n"
-                                    "■  Pricing — Exotic option pricing, structured products\n"
-                                    "■  Regulatory — Basel III/IV, FRTB, CVA/DVA/FVA\n"
-                                    "■  Risk — VaR, CVaR, stress testing, scenario analysis\n"
-                                    "■  Scheduling — Date math, day count conventions, roll rules\n"
-                                    "■  Solver — Root finding, optimization, calibration\n"
-                                    "■  Statistics — Distributions, regression, time series\n"
-                                    "■  Stochastic — Stochastic processes, Brownian motion, jump diffusion\n"
-                                    "■  Volatility — Vol models, SABR, Heston, local vol")},
-            {tr("REAL-WORLD USAGE"), tr("■  Quantitative analyst: Price complex derivatives, calibrate models\n"
-                                        "■  Risk manager: Run VaR, stress tests, regulatory calculations\n"
-                                        "■  Portfolio manager: Optimize allocation, efficient frontier analysis\n"
-                                        "■  Fixed income: Yield curve construction, swap valuation")},
-            {tr("SKILL LEVELS"),
-             tr("BEGINNER: Use the Statistics module for basic data analysis\n"
-                "INTERMEDIATE: Price bonds and options, build yield curves\n"
-                "ADVANCED: Calibrate vol models, run Monte Carlo simulations, regulatory calculations\n"
-                "PRO: Custom model development, multi-curve pricing, XVA calculations")},
-        });
-}
-
 QWidget* DocsScreen::page_ai_chat() {
     return make_page(
         tr("AI CHAT"), tr("AI-powered financial assistant"),

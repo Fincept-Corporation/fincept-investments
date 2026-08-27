@@ -1,7 +1,6 @@
 #include "app/ScreenSmokeTest.h"
 
 #include "app/DockScreenRouter.h"
-#include "auth/InactivityGuard.h"
 #include "core/logging/Logger.h"
 
 #include <QCoreApplication>
@@ -57,30 +56,6 @@ int run_screen_smoke_test(DockScreenRouter* router) {
         std::fprintf(stderr, "[Smoke] FAIL: no router\n");
         std::fflush(stderr);
         return 2;
-    }
-
-    // A PIN-locked terminal makes this test meaningless, and silently so.
-    // DockScreenRouter::navigate() hard-refuses while the terminal is locked
-    // (deliberately — nothing may mutate panel state behind the PIN gate), so
-    // every navigation no-ops and EVERY lazily-registered screen is reported as
-    // "did not construct". That produced 46 phantom failures on a developer
-    // machine with a PIN set, while CI — a fresh runner with no PIN — passed.
-    // A test that only works in one environment and lies in the other is worse
-    // than no test, so detect the condition and say exactly what is wrong.
-    //
-    // Deliberately NOT auto-unlocking: a test harness must not learn to bypass
-    // an authentication gate.
-    if (auth::InactivityGuard::instance().is_terminal_locked()) {
-        std::fprintf(stderr,
-                     "[Smoke] FAIL: terminal is PIN-locked — navigate() is suppressed, so no screen can be\n"
-                     "        constructed and every result would be a false failure.\n"
-                     "        Clear the PIN (Settings > Security > Change PIN) and re-run.\n"
-                     "        NOTE: --profile does NOT help. The PIN lives in machine-wide SecureStorage,\n"
-                     "        not in the profile directory, so a fresh profile still hits the lock once it\n"
-                     "        has an authenticated session. CI passes only because its runners have no PIN.\n");
-        std::fflush(stderr);
-        LOG_ERROR("Smoke", "Aborted: terminal is PIN-locked; navigate() is suppressed behind the lock gate");
-        return 3;
     }
 
     const QStringList ids = router->all_screen_ids();

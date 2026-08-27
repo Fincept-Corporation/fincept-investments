@@ -1,7 +1,7 @@
 #include "trading/auth/RedirectServer.h"
 
-#include "auth/ConstantTime.h"
-#include "auth/LoopbackGuard.h"
+#include "core/security/ConstantTime.h"
+#include "core/security/LoopbackGuard.h"
 #include "core/logging/Logger.h"
 
 #include <QHostAddress>
@@ -119,10 +119,10 @@ void RedirectServer::handle_new_connection() {
             return;
         }
 
-        // ── Gate 2: Host + fetch-metadata (see auth/LoopbackGuard.h) ─────────
-        // Fully qualified: this file lives in fincept::trading::auth, and the
-        // helper lives in fincept::auth — two different `auth` namespaces.
-        const auto check = ::fincept::auth::check_loopback_request(request, port_);
+        // ── Gate 2: Host + fetch-metadata (see core/security/LoopbackGuard.h) ─
+        // Fully qualified: this file lives in fincept::trading::auth, so an
+        // unqualified name would resolve into the wrong namespace.
+        const auto check = ::fincept::security::check_loopback_request(request, port_);
         if (!check.allowed) {
             LOG_WARN("RedirectServer", "Rejected OAuth callback: " + check.reason);
             write_page(sock, 403, "Forbidden", QByteArrayLiteral("forbidden"));
@@ -154,7 +154,7 @@ void RedirectServer::handle_new_connection() {
                 LOG_WARN("RedirectServer",
                          "OAuth callback carried no state nonce — the authorize URL is not sending state(). "
                          "Any page the user has open can forge this callback until it does.");
-            } else if (!::fincept::auth::constant_time_equals(echoed_state, state_)) {
+            } else if (!::fincept::security::constant_time_equals(echoed_state, state_)) {
                 LOG_WARN("RedirectServer", "Rejected OAuth callback: state nonce mismatch");
                 write_page(sock, 403, "Forbidden", QByteArrayLiteral("forbidden"));
                 sock->disconnectFromHost();

@@ -8,7 +8,6 @@
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "services/backtesting/BacktestingService.h"
-#include "services/cloud/CloudSyncEngine.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -118,15 +117,6 @@ WatchlistScreen::WatchlistScreen(QWidget* parent) : QWidget(parent) {
     connect(&ThemeManager::instance(), &ThemeManager::theme_changed, this,
             [this](const ThemeTokens&) { refresh_theme(); });
     refresh_theme();
-
-    // Reload from the local cache when a cloud pull updates watchlists.
-    connect(&fincept::services::cloud::CloudSyncEngine::instance(),
-            &fincept::services::cloud::CloudSyncEngine::cloud_data_changed, this, [this](const QString& entity) {
-                if (entity == QLatin1String("watchlist")) {
-                    load_watchlists();
-                    load_stocks();
-                }
-            });
 }
 
 void WatchlistScreen::showEvent(QShowEvent* event) {
@@ -134,8 +124,6 @@ void WatchlistScreen::showEvent(QShowEvent* event) {
     if (!current_wl_id_.isEmpty() && !stocks_.isEmpty())
         hub_resubscribe_stocks();
     subscribe_mcp_events();
-    // Rate-gated pull of cloud watchlists on screen entry (no-op when sync is off).
-    fincept::services::cloud::CloudSyncEngine::instance().request_pull(QStringLiteral("watchlist"));
 }
 
 void WatchlistScreen::hideEvent(QHideEvent* event) {

@@ -15,7 +15,7 @@
 // payload. Agents share the parent's user session, so the token only guards
 // against OTHER local processes stumbling onto the port.
 //
-// Every request is also checked against auth/LoopbackGuard.h (Host must be our
+// Every request is also checked against core/security/LoopbackGuard.h (Host must be our
 // own loopback authority; no cross-site fetch metadata), which is what stops a
 // web page the user has open — or a DNS-rebound hostname — from driving this
 // port. This endpoint is machine-to-machine, so cross-site navigations are

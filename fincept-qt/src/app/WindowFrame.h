@@ -25,13 +25,6 @@ class TabBar;
 class DebugOverlay;
 class QuickCommandBar;
 } // namespace fincept::ui
-namespace fincept::chat_mode {
-class ChatModeScreen;
-}
-namespace fincept::screens {
-class LockScreen;
-}
-
 namespace fincept {
 
 class WindowFrame : public QMainWindow {
@@ -123,11 +116,6 @@ class WindowFrame : public QMainWindow {
     /// init before setup_ui completes.
     ads::CDockManager* dock_manager() const { return dock_manager_; }
 
-    /// True while the lock/PIN screen is active on this frame. Action
-    /// handlers consult this to short-circuit when the user has locked
-    /// the terminal — actions are inert behind the lock overlay.
-    bool is_locked() const { return locked_; }
-
     /// Whether this frame is "active for work" — Phase 8 / decision 9.1.
     /// Best-effort flag derived from `!isMinimized()` and `isVisible()`.
     /// Used by DataHub to gate fanout of `pause_when_inactive` topics so
@@ -172,11 +160,6 @@ class WindowFrame : public QMainWindow {
     /// Flip focus mode (chrome hide/show).
     void toggle_focus_mode();
 
-    /// Public entry into the chat-mode toggle the constructor used to wire
-    /// directly. The internal `toggle_chat_mode()` remains private so legacy
-    /// internal callers don't change.
-    void toggle_chat_mode_action();
-
     /// Forward `refresh` to whichever panel currently has focus inside this
     /// frame. No-op if no panel is focused or it doesn't expose `refresh()`.
     void refresh_focused_panel();
@@ -207,9 +190,6 @@ class WindowFrame : public QMainWindow {
     void changeEvent(QEvent* event) override;
 
   private:
-    QStackedWidget* stack_ = nullptr;
-    QStackedWidget* auth_stack_ = nullptr;
-
     int window_id_ = 0;
 
     /// Lazily-minted, process-stable UUID for this frame. See frame_uuid()
@@ -241,15 +221,8 @@ class WindowFrame : public QMainWindow {
 
     // View state
     bool focus_mode_ = false;
-    bool chat_mode_ = false;
     bool always_on_top_ = false;
-    bool locked_ = false;           ///< True while lock/PIN screen is active — blocks navigation.
-    bool pin_gate_cleared_ = false; ///< Set once the user has passed the PIN gate this session.
-                                    ///< Prevents subsequent auth_state_changed events (profile
-                                    ///< refresh, subscription fetch, focus refresh) from
-                                    ///< re-locking the terminal. Reset on lock / logout.
     AiChatBubble* chat_bubble_ = nullptr;
-    QTimer* user_refresh_timer_ = nullptr;
 
     // Debounced persistence of dock layout on add/replace/remove via command bar.
     // Without this, layout changes only survive clean shutdown (closeEvent),
@@ -258,43 +231,9 @@ class WindowFrame : public QMainWindow {
     bool suppress_layout_save_ = false;
     void schedule_dock_layout_save();
 
-    // Chat mode
-    chat_mode::ChatModeScreen* chat_mode_screen_ = nullptr;
-
-    // Lock/PIN screen
-    screens::LockScreen* lock_screen_ = nullptr;
-
-    void setup_auth_screens();
     void setup_docking_mode();
     void setup_dock_screens();
-    void on_auth_state_changed();
-    void toggle_chat_mode();
-    void show_lock_screen();
-    /// Apply the lock UI state to THIS window. Idempotent. Wired to
-    /// InactivityGuard::terminal_locked_changed so every window in the
-    /// process locks in lockstep with the window that initiated the lock.
-    void apply_lock_state(bool locked);
-    void on_terminal_unlocked();
     void update_window_title();
-    /// Show or hide the toolbar/status bar shell (hidden during auth screens).
-    void set_shell_visible(bool visible);
-    /// Show the auth stack at the given index and hide the privileged shell.
-    /// All login/register/forgot/pricing/info transitions go through here.
-    void enter_auth_stack(int auth_index);
-
-    // Info screens stack (Contact, Terms, Privacy, Trademarks, Help)
-    QStackedWidget* info_stack_ = nullptr;
-
-  private slots:
-    void show_login();
-    void show_register();
-    void show_forgot_password();
-    void show_pricing();
-    void show_info_contact();
-    void show_info_terms();
-    void show_info_privacy();
-    void show_info_trademarks();
-    void show_info_help();
 };
 
 } // namespace fincept

@@ -10,9 +10,9 @@
 namespace fincept::ai_chat {
 
 const QStringList& ProviderCatalog::known_providers() {
-    static const QStringList kProviders = {"openai",     "anthropic", "gemini",       "groq",    "deepseek",
-                                           "openrouter", "minimax",   "kimi",         "ollama",  "xai",
-                                           "fincept",    "astraflow", "astraflow_cn", "aihubmix"};
+    static const QStringList kProviders = {"openai",  "anthropic",    "gemini",   "groq",      "deepseek",
+                                           "minimax", "openrouter",   "kimi",     "ollama",    "xai",
+                                           "astraflow", "astraflow_cn", "aihubmix"};
     return kProviders;
 }
 
@@ -38,7 +38,6 @@ QString ProviderCatalog::display_name(const QString& provider_id) {
         {"kimi", "Kimi"},
         {"ollama", "Ollama"},
         {"xai", "xAI"},
-        {"fincept", "Fincept LLM (recommended)"},
         {"astraflow", "AstraFlow"},
         {"astraflow_cn", "AstraFlow CN"},
         {"aihubmix", "AIHubMix"},
@@ -77,8 +76,6 @@ QString ProviderCatalog::default_base_url(const QString& provider) {
         return "http://localhost:11434";
     if (p == "xai")
         return {};
-    if (p == "fincept")
-        return {}; // endpoints are hardcoded in LlmService, no base_url needed
     if (p == "astraflow")
         return "https://api-us-ca.umodelverse.ai/v1"; // Astraflow global endpoint (UCloud)
     if (p == "astraflow_cn")
@@ -126,8 +123,6 @@ QStringList ProviderCatalog::fallback_models(const QString& provider) {
                    // combo only shows what the user actually has installed locally.
     if (p == "xai")
         return {"grok-4-latest", "grok-4", "grok-3", "grok-3-mini"};
-    if (p == "fincept")
-        return {"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"};
     if (p == "astraflow" || p == "astraflow_cn")
         // Astraflow by UCloud — OpenAI-compatible aggregator supporting 200+ models.
         // A non-exhaustive starter list; full list fetchable via Fetch button.
@@ -166,19 +161,19 @@ QStringList ProviderCatalog::fallback_models(const QString& provider) {
 
 bool ProviderCatalog::requires_api_key(const QString& provider) {
     const QString p = provider.toLower();
-    return p != "ollama" && p != "fincept";
+    return p != "ollama";
 }
 
 bool ProviderCatalog::is_openai_compatible(const QString& provider) {
     const QString p = provider.toLower();
-    return p != "anthropic" && p != "gemini" && p != "google" && p != "fincept";
+    return p != "anthropic" && p != "gemini" && p != "google";
 }
 
 QString ProviderCatalog::brand_color(const QString& provider) {
     static const QHash<QString, QString> kColors = {
         {"openai", "#10A37F"},       {"anthropic", "#D97757"},  {"gemini", "#4285F4"},  {"groq", "#F55036"},
         {"deepseek", "#4D6BFE"},     {"openrouter", "#8B5CF6"}, {"minimax", "#FF4D6A"}, {"kimi", "#16D9C4"},
-        {"ollama", "#9CA3AF"},       {"xai", "#E7E9EA"},        {"fincept", "#FF8800"}, {"astraflow", "#38BDF8"},
+        {"ollama", "#9CA3AF"},       {"xai", "#E7E9EA"},        {"astraflow", "#38BDF8"},
         {"astraflow_cn", "#38BDF8"}, {"aihubmix", "#F59E0B"},
     };
     const auto it = kColors.find(provider.toLower());
@@ -193,9 +188,6 @@ QString ProviderCatalog::brand_color(const QString& provider) {
 // NOLINTNEXTLINE(misc-no-recursion)
 QString ProviderCatalog::chat_endpoint(const QString& provider, const QString& base_url, const QString& model) {
     const QString p = provider.toLower();
-    if (p == "fincept")
-        return {}; // caller composes AppConfig::api_base_url() + "/research/chat"
-
     if (!base_url.isEmpty()) {
         QString base = base_url;
         while (base.endsWith('/'))

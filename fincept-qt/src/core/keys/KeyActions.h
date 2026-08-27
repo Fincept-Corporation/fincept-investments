@@ -5,7 +5,6 @@ namespace fincept {
 enum class KeyAction {
     // Global
     Refresh,
-    ToggleChat,
     FocusMode,
     Fullscreen,
     Screenshot,
@@ -59,9 +58,6 @@ enum class KeyAction {
 
     BrowseComponents,
     ToggleAlwaysOnTop,
-
-    /// Manual lock — bypasses inactivity timer. Default Ctrl+L.
-    LockNow,
 };
 
 } // namespace fincept

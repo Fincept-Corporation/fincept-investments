@@ -11,7 +11,6 @@
 //   - AgentService_Repositories.cpp — memory, sessions, paper trading
 #include "services/agents/AgentService.h"
 
-#include "auth/AuthManager.h"
 #include "core/logging/Logger.h"
 #include "datahub/DataHub.h"
 #include "datahub/TopicPolicy.h"
@@ -144,11 +143,11 @@ AgentService::AgentService(QObject* parent) : QObject(parent) {
     //
     // ── The confirmation-modal seam ──────────────────────────────────────────
     //
-    // The `required >= AuthLevel::Verified` line below is the SINGLE line to
-    // change when the confirmation modal lands. It denies unconditionally, so
-    // the 28 tools declared AuthLevel::ExplicitConfirm are refused on every
-    // path — including for a user who has explicitly granted destructive
-    // capability in Settings → Security. That is deliberate and stays as-is:
+    // The `required == AuthLevel::ExplicitConfirm` line below is the SINGLE
+    // line to change when the confirmation modal lands. It denies
+    // unconditionally, so every tool declared AuthLevel::ExplicitConfirm is
+    // refused on every path — including for a user who has explicitly granted
+    // destructive capability in Settings → Security. That is deliberate:
     // "ask the user" cannot be honoured while there is nobody to ask, and
     // failing closed is the only safe reading of a tool that asked to be
     // confirmed.
@@ -160,7 +159,6 @@ AgentService::AgentService(QObject* parent) : QObject(parent) {
     //       live-trading (6): live_place_order, live_smart_order,
     //         live_cancel_order, live_cancel_all_orders, live_close_position,
     //         live_close_all_positions
-    //       profile     (1): profile_get_api_key   (returns live key material)
     //       mcp-servers (6): install_mcp_server_from_marketplace,
     //         add_mcp_server, remove_mcp_server, start_mcp_server,
     //         restart_mcp_server, call_external_mcp_tool
@@ -178,10 +176,10 @@ AgentService::AgentService(QObject* parent) : QObject(parent) {
     //       file_manager (1): download_managed_file
     //
     // When the modal exists, replace the line with a call that prompts and
-    // returns the user's verdict. Do NOT relax it to `> Verified` or drop the
-    // ExplicitConfirm level — the 13 tools in the first group depend on it.
+    // returns the user's verdict. Do NOT drop the ExplicitConfirm level — the
+    // 12 tools in the first group depend on it.
     mcp::McpProvider::instance().set_auth_checker([](mcp::AuthLevel required, bool is_destructive) -> bool {
-        if (required >= mcp::AuthLevel::Verified)
+        if (required == mcp::AuthLevel::ExplicitConfirm)
             return false;
         if (is_destructive && mcp::TerminalMcpBridge::is_call_in_progress() &&
             !mcp::TerminalMcpBridge::is_destructive_allowed())
@@ -277,16 +275,6 @@ QJsonObject AgentService::build_api_keys() const {
         }
     }
 
-    // Always include Fincept session API key (from login) so agents can use
-    // the fincept provider even if user hasn't manually configured it in Settings.
-    if (!keys.contains("fincept")) {
-        const auto& session = auth::AuthManager::instance().session();
-        if (!session.api_key.isEmpty()) {
-            keys["fincept"] = session.api_key;
-            keys["FINCEPT_API_KEY"] = session.api_key;
-        }
-    }
-
     return keys;
 }
 
@@ -323,18 +311,13 @@ QJsonObject AgentService::build_payload(const QString& action, const QJsonObject
     }
 
     // Resolve user_id for per-persona SQLite isolation on the Python side.
-    // Priority: params["user_id"] (caller override) > config["user_id"] > session-derived.
-    // Session: user_info.id > 0 → QString::number(id); id == 0 (guest/unauth) → "guest".
+    // Priority: params["user_id"] (caller override) > config["user_id"] > "local".
+    // There are no user accounts, so everything runs under a single local identity —
+    // the same code path unauthenticated runs always took (it sent "guest").
     QJsonObject enriched_params = params;
     if (!enriched_params.contains("user_id") || enriched_params["user_id"].toString().isEmpty()) {
-        QString uid;
-        if (config.contains("user_id") && !config["user_id"].toString().isEmpty()) {
-            uid = config["user_id"].toString();
-        } else {
-            const auto& session = auth::AuthManager::instance().session();
-            uid = session.user_info.id > 0 ? QString::number(session.user_info.id) : QStringLiteral("guest");
-        }
-        enriched_params["user_id"] = uid;
+        const QString cfg_uid = config["user_id"].toString();
+        enriched_params["user_id"] = cfg_uid.isEmpty() ? QStringLiteral("local") : cfg_uid;
     }
 
     // Phase 3 — inject the local MCP bridge endpoint + filtered tool catalog

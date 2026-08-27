@@ -2,7 +2,6 @@
 
 #include "mcp/tools/SystemTools.h"
 
-#include "auth/AuthManager.h"
 #include "core/HealthMonitor.h"
 #include "core/logging/Logger.h"
 #include "mcp/McpProvider.h"
@@ -20,29 +19,6 @@ namespace fincept::mcp::tools {
 
 std::vector<ToolDef> get_system_tools() {
     std::vector<ToolDef> tools;
-
-    // ── get_auth_status ────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "get_auth_status";
-        t.description = "Check if the user is logged in and get basic account info.";
-        t.category = "system";
-        t.handler = [](const QJsonObject&) -> ToolResult {
-            auto& am = auth::AuthManager::instance();
-            if (!am.is_authenticated()) {
-                return ToolResult::ok_data(QJsonObject{{"authenticated", false}, {"user_type", "none"}});
-            }
-            const auto& s = am.session();
-            return ToolResult::ok_data(QJsonObject{{"authenticated", true},
-                                                   {"username", s.user_info.username},
-                                                   {"email", s.user_info.email},
-                                                   {"account_type", s.account_type()},
-                                                   {"is_verified", s.user_info.is_verified},
-                                                   {"credit_balance", s.user_info.credit_balance},
-                                                   {"has_subscription", s.has_subscription}});
-        };
-        tools.push_back(std::move(t));
-    }
 
     // ── get_cache_stats ────────────────────────────────────────────────
     {

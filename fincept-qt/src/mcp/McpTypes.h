@@ -239,35 +239,26 @@ struct ToolSchema {
 // ============================================================================
 //
 // Every tool declares an AuthLevel; McpProvider::call_tool checks it before
-// invoking the handler. Defaults to None to keep behaviour unchanged for
-// the 237 untagged tools — Phase 6.4 batch can elevate dangerous tools.
+// invoking the handler. Defaults to None.
 //
-// AuthLevel.None         — anyone, including guest users
-// AuthLevel.Authenticated — must be logged in
-// AuthLevel.Verified     — must have verified email
-// AuthLevel.Subscribed   — must have an active subscription
-// AuthLevel.ExplicitConfirm — requires user to OK each call (modal dialog
-//                              wired in Phase 6.12). Pair with is_destructive
-//                              to force the modal regardless of auth state.
+// This is a DANGEROUS-ACTION gate, not a login gate — there are no user
+// accounts. The Authenticated / Verified / Subscribed levels went with them.
+//
+// AuthLevel.None            — no gate
+// AuthLevel.ExplicitConfirm — requires the user to OK each call (modal dialog
+//                             wired in Phase 6.12). Pair with is_destructive
+//                             to force the modal regardless of the session
+//                             capability grant.
 
 enum class AuthLevel {
     None = 0,
-    Authenticated = 1,
-    Verified = 2,
-    Subscribed = 3,
-    ExplicitConfirm = 4,
+    ExplicitConfirm = 1,
 };
 
 inline const char* auth_level_str(AuthLevel a) {
     switch (a) {
         case AuthLevel::None:
             return "none";
-        case AuthLevel::Authenticated:
-            return "authenticated";
-        case AuthLevel::Verified:
-            return "verified";
-        case AuthLevel::Subscribed:
-            return "subscribed";
         case AuthLevel::ExplicitConfirm:
             return "explicit_confirm";
     }

@@ -2,7 +2,6 @@
 
 #include "services/llm/LlmService.h"
 
-#include "auth/AuthManager.h"
 #include "core/config/AppConfig.h"
 #include "core/logging/Logger.h"
 #include "datahub/DataHub.h"
@@ -57,18 +56,9 @@ void LlmService::reload_config() {
 }
 
 void LlmService::ensure_config() const {
-    // Called with mutex_ held. Cache is one-shot except for Fincept credentials —
-    // those re-resolve every call so a login that happens after first ensure_config() doesn't 401 forever.
-    if (config_loaded_) {
-        if (provider_ == "fincept") {
-            // Resolve via AuthManager (session → SecureStorage). Never the
-            // legacy plaintext settings row (CR-08).
-            const QString key = fincept::auth::AuthManager::instance().fincept_api_key();
-            if (!key.isEmpty())
-                api_key_ = key;
-        }
+    // Called with mutex_ held. The cache is one-shot.
+    if (config_loaded_)
         return;
-    }
 
     provider_ = model_ = api_key_ = base_url_ = system_prompt_ = {};
     temperature_ = 0.7;
@@ -99,21 +89,10 @@ void LlmService::ensure_config() const {
         }
     }
 
-    // Nothing configured — default to Fincept with the session key.
-    if (provider_.isEmpty()) {
-        provider_ = "fincept";
-        model_ = "MiniMax-M2.7";
-        base_url_ = {};
-        LOG_INFO(kLlmSvcTag, "No LLM provider configured — using Fincept default");
-    }
-
-    // Fincept key resolves via AuthManager (live session → encrypted
-    // SecureStorage). The legacy plaintext settings row is no longer read (CR-08).
-    if (provider_ == "fincept") {
-        const QString key = fincept::auth::AuthManager::instance().fincept_api_key();
-        if (!key.isEmpty())
-            api_key_ = key;
-    }
+    // Nothing configured — leave provider_ empty. is_configured() then returns
+    // false and the caller surfaces the "configure Settings → LLM Config" path.
+    if (provider_.isEmpty())
+        LOG_INFO(kLlmSvcTag, "No LLM provider configured");
 
     auto gs = LlmConfigRepository::instance().get_global_settings();
     if (gs.is_ok()) {
@@ -341,11 +320,6 @@ QString LlmService::get_endpoint_url() const {
     if (ProviderCatalog::is_blocked(p, base_url_))
         return {};
 
-    // Fincept sync chat endpoint (async lives in fincept_async_request).
-    if (p == "fincept") {
-        return fincept::AppConfig::instance().api_base_url() + "/research/chat";
-    }
-
     // Custom base_url wins over hard-coded defaults.
     if (!base_url_.isEmpty()) {
         QString base = base_url_;
@@ -420,14 +394,6 @@ QMap<QString, QString> LlmService::get_headers() const {
     } else if (p == "gemini" || p == "google") {
         if (!api_key_.isEmpty())
             h["x-goog-api-key"] = api_key_;
-    } else if (p == "fincept") {
-        if (!api_key_.isEmpty())
-            h["X-API-Key"] = api_key_;
-        // session_token only lives in AuthManager — read live, never cached.
-        const auto& sess = fincept::auth::AuthManager::instance().session();
-        if (!sess.session_token.isEmpty())
-            h["X-Session-Token"] = sess.session_token;
-        h["User-Agent"] = "FinceptTerminal/4.0"; // Cloudflare requires it.
     } else {
         if (!api_key_.isEmpty())
             h["Authorization"] = "Bearer " + api_key_;
@@ -462,12 +428,6 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
     } else if (provider_ == "gemini" || provider_ == "google") {
         req_body = build_gemini_request(user_message, history);
         // Auth via x-goog-api-key header — do NOT append ?key= (would leak into access logs).
-    } else if (provider_ == "fincept") {
-        // Fincept uses two separate endpoints:
-        // Primary response → async (submit + poll, returns richer model output)
-        // Follow-ups (tool results) → sync /research/chat
-        LOG_INFO(kLlmSvcTag, "do_request: routing to fincept_async_request");
-        return fincept_async_request(user_message, history);
     } else {
         req_body = build_openai_request(user_message, history, false, true);
     }
@@ -743,19 +703,6 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
             }
         }
 
-    } else if (provider_ == "fincept") {
-        // {"success":..., "data":{"choices":[{"message":{"content":...}}]}} or top-level shape.
-        QJsonObject data = rj.contains("data") ? rj["data"].toObject() : rj;
-        QJsonArray choices = data["choices"].toArray();
-        if (!choices.isEmpty())
-            resp.content = extract_openai_message_text(choices[0].toObject()["message"].toObject());
-        // success=true with empty content is a soft error.
-        if (resp.content.isEmpty()) {
-            resp.error = "Fincept LLM returned an empty response. Please try again.";
-            LOG_WARN(kLlmSvcTag, "Fincept /research/chat returned empty choices or content");
-            return resp;
-        }
-
     } else {
         // OpenAI-compatible.
         QJsonArray choices = rj["choices"].toArray();
@@ -838,9 +785,9 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
 
 LlmResponse LlmService::do_streaming_request(const QString& user_message,
                                              const std::vector<ConversationMessage>& history, StreamCallback on_chunk) {
-    // Gemini uses :streamGenerateContent, Fincept uses async submit/poll — neither
-    // fits this OpenAI-compat SSE path. Fall back to do_request and emit as one chunk.
-    if (provider_ == "gemini" || provider_ == "google" || provider_ == "fincept") {
+    // Gemini uses :streamGenerateContent, which does not fit this OpenAI-compat
+    // SSE path. Fall back to do_request and emit as one chunk.
+    if (provider_ == "gemini" || provider_ == "google") {
         detail::ProgressEmitterGuard pg([on_chunk](const QString& s) { on_chunk(s, false); });
         auto resp = do_request(user_message, history);
         if (resp.success && !resp.content.isEmpty())
@@ -1031,10 +978,10 @@ LlmResponse LlmService::do_streaming_request(const QString& user_message,
                         }
                     }
 
-                    // Fincept can also surface tool_calls at top level.
+                    // Some providers surface tool_calls at top level.
                     if (!obj["tool_calls"].isUndefined() && !obj["tool_calls"].isNull() &&
                         obj["tool_calls"].toArray().size() > 0) {
-                        LOG_INFO(kLlmSvcTag, "STREAM: top-level tool_calls detected (fincept)");
+                        LOG_INFO(kLlmSvcTag, "STREAM: top-level tool_calls detected");
                         tool_call_detected = true;
                         loop.quit();
                         return;

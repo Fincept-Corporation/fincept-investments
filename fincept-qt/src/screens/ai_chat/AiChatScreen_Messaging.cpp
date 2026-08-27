@@ -624,14 +624,9 @@ void AiChatScreen::update_stats() {
     auto& llm = ai_chat::LlmService::instance();
     if (llm.is_configured()) {
         const QString provider_raw = llm.active_provider();
-        const bool is_fincept = (provider_raw.toLower() == "fincept");
-
-        // Display names
-        const QString prov_display = is_fincept ? tr("Fincept LLM") : provider_raw.toUpper();
+        const QString prov_display = provider_raw.toUpper();
         const QString model_raw = llm.active_model();
-        // For fincept, don't expose internal model name
-        const QString model_display = is_fincept ? tr("Fincept LLM") : model_raw;
-        QString model_short = model_display;
+        QString model_short = model_raw;
         if (model_short.length() > 24)
             model_short = model_short.left(22) + "..";
 
@@ -639,19 +634,14 @@ void AiChatScreen::update_stats() {
         provider_lbl_->setText(prov_display);
         provider_lbl_->setStyleSheet(
             QString("color:%1;font-size:%2px;font-weight:600;").arg(col::AMBER()).arg(fnt::SMALL));
-        model_lbl_->setText(is_fincept ? tr("Managed by Fincept") : model_short);
-        model_lbl_->setToolTip(is_fincept ? tr("Fincept LLM — managed AI service") : model_raw);
+        model_lbl_->setText(model_short);
+        model_lbl_->setToolTip(model_raw);
         model_lbl_->setStyleSheet(QString("color:%1;font-size:%2px;").arg(col::TEXT_SECONDARY()).arg(fnt::TINY));
 
         // Header model pill — show "Provider / Model" for clarity
-        if (is_fincept) {
-            hdr_model_lbl_->setText(tr("Fincept LLM"));
-            hdr_model_lbl_->setToolTip(tr("Fincept managed AI service\n\nChange in Settings > LLM Configuration"));
-        } else {
-            hdr_model_lbl_->setText(provider_raw.left(1).toUpper() + provider_raw.mid(1) + " / " + model_short);
-            hdr_model_lbl_->setToolTip(
-                tr("Provider: %1\nModel: %2\n\nChange in Settings > LLM Configuration").arg(prov_display, model_raw));
-        }
+        hdr_model_lbl_->setText(provider_raw.left(1).toUpper() + provider_raw.mid(1) + " / " + model_short);
+        hdr_model_lbl_->setToolTip(
+            tr("Provider: %1\nModel: %2\n\nChange in Settings > LLM Configuration").arg(prov_display, model_raw));
     } else {
         provider_lbl_->setText(tr("No provider"));
         provider_lbl_->setStyleSheet(

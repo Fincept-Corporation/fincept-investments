@@ -86,7 +86,6 @@ std::vector<ToolDef> get_python_tools() {
         // Phase 6.3: arbitrary script execution must be gated. Even with the
         // regex pattern check on script name, the script can read/write
         // files, hit the network, etc. Always confirm.
-        t.auth_required = AuthLevel::Authenticated;
         t.is_destructive = true;
         t.async_handler = [](const QJsonObject& args_obj, ToolContext ctx,
                              std::shared_ptr<QPromise<ToolResult>> promise) {

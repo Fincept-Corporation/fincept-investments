@@ -8,7 +8,7 @@
 // Owned by the dialog for the duration of one browser-login attempt.
 //
 // SECURITY — this listener accepts a credential from the browser on a fixed,
-// guessable port. Three gates protect it (see auth/LoopbackGuard.h for the
+// guessable port. Three gates protect it (see core/security/LoopbackGuard.h for the
 // threat model):
 //   1. Loopback bind — no other host can reach it.
 //   2. Host + Sec-Fetch-* validation — rejects DNS-rebinding and any

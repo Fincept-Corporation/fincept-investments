@@ -7,7 +7,6 @@
 //
 // Part of the partial-class split of AgentService.cpp.
 
-#include "auth/AuthManager.h"
 #include "core/logging/Logger.h"
 #include "datahub/DataHub.h"
 #include "datahub/TopicPolicy.h"

@@ -26,9 +26,8 @@ class HttpClient : public QObject {
 
     /// Extra raw headers for one request, applied last so they override the
     /// defaults set by build_request(). This is the supported way to send a
-    /// per-caller credential: this class is a process-wide singleton, so
-    /// set_auth_header()/set_session_token() leak into every other caller's
-    /// requests and must not be used to scope one call.
+    /// per-caller credential — this class is a process-wide singleton, so it
+    /// holds no credential state of its own.
     using Headers = QMap<QByteArray, QByteArray>;
 
     /// `context` scopes callback lifetime — pass `this` from anything that can outlive its reply.
@@ -53,9 +52,6 @@ class HttpClient : public QObject {
     /// For a non-HTTP failure (transport/JSON parse) the raw text is returned.
     static QString message_from_error(const std::string& error);
 
-    void set_auth_header(const QString& api_key);
-    void set_session_token(const QString& token);
-    void clear_session_token();
     void set_base_url(const QString& base);
 
   private:
@@ -65,8 +61,6 @@ class HttpClient : public QObject {
 
     QNetworkAccessManager* nam_ = nullptr;
     QString base_url_;
-    QString api_key_;
-    QString session_token_;
 };
 
 } // namespace fincept

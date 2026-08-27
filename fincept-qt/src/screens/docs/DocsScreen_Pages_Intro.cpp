@@ -117,18 +117,18 @@ QWidget* DocsScreen::page_getting_started() {
     sep->setStyleSheet(QString("color: %1;").arg(ui::colors::BORDER_DIM()));
     vl->addWidget(sep);
 
-    vl->addWidget(make_section_panel("1", tr("LAUNCH & LOGIN"),
-                                     tr("When you first launch Fincept Terminal, you'll see the login screen. "
-                                        "You can either:\n\n"
-                                        "■  Register a new account with email and password\n"
-                                        "■  Continue as Guest (limited features)\n"
-                                        "■  Log in with existing credentials\n\n"
-                                        "After login, you'll land on the Dashboard — your home base."),
+    vl->addWidget(make_section_panel("1", tr("LAUNCH"),
+                                     tr("Fincept Terminal opens straight onto the Dashboard — your home base. "
+                                        "There is no account and no sign-in: everything runs locally against "
+                                        "your own data and your own API keys.\n\n"
+                                        "■  Configure market data providers in Settings → Data Sources\n"
+                                        "■  Configure an AI provider in Settings → LLM Config\n"
+                                        "■  Connect a broker in Settings → Credentials"),
                                      ui::colors::POSITIVE));
 
     vl->addWidget(make_section_panel("2", tr("THE INTERFACE"),
                                      tr("The terminal has four main zones:\n\n"
-                                        "TOOLBAR (top) — File, Navigate, View, Help menus + session info\n"
+                                        "TOOLBAR (top) — File, Navigate, View, Help menus + clock\n"
                                         "TAB BAR — 14 primary tabs: Dashboard, Markets, Crypto, Portfolio, etc.\n"
                                         "CONTENT AREA — The active screen fills this zone\n"
                                         "STATUS BAR (bottom) — Version, market indicators, connection status\n\n"

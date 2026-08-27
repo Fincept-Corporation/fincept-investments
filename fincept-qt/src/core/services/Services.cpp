@@ -1,6 +1,5 @@
 #include "core/services/Services.h"
 
-#include "auth/AuthManager.h"
 #include "core/events/EventBus.h"
 #include "datahub/DataHub.h"
 #include "storage/secure/SecureStorage.h"
@@ -13,9 +12,6 @@ Services& Services::root() {
     return s;
 }
 
-auth::AuthManager& Services::auth() {
-    return auth::AuthManager::instance();
-}
 EventBus& Services::events() {
     return EventBus::instance();
 }

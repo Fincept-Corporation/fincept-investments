@@ -1,7 +1,7 @@
 #include "services/wallet/WalletTxBridge.h"
 
-#include "auth/ConstantTime.h"
-#include "auth/LoopbackGuard.h"
+#include "core/security/ConstantTime.h"
+#include "core/security/LoopbackGuard.h"
 #include "core/logging/Logger.h"
 
 #include <QByteArray>
@@ -226,9 +226,9 @@ void WalletTxBridge::on_new_connection() {
             }
             // Host + fetch-metadata guard — blocks DNS rebinding and any
             // cross-origin subresource request. Our own swap page is
-            // same-origin and passes. See auth/LoopbackGuard.h.
+            // same-origin and passes. See core/security/LoopbackGuard.h.
             const auto guard =
-                fincept::auth::check_loopback_request(header_block, server_ ? server_->serverPort() : quint16(0));
+                fincept::security::check_loopback_request(header_block, server_ ? server_->serverPort() : quint16(0));
             if (!guard.allowed) {
                 LOG_WARN("WalletTxBridge", "rejected request: " + guard.reason);
                 write_response(socket, 403, "text/plain", "forbidden");
@@ -283,7 +283,7 @@ void WalletTxBridge::handle_request(QTcpSocket* socket, const QByteArray& body, 
     // Constant-time compare — a short-circuiting `!=` leaks the token byte by
     // byte through response timing to anything that can hammer this port.
     const auto token_in_query = tx_query_param(path, "token");
-    if (!fincept::auth::constant_time_equals(token_in_query, session_token_)) {
+    if (!fincept::security::constant_time_equals(token_in_query, session_token_)) {
         LOG_WARN("WalletTxBridge", "token mismatch — rejecting");
         write_response(socket, 403, "text/plain", "forbidden");
         socket->disconnectFromHost();

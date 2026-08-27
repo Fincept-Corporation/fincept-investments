@@ -224,12 +224,10 @@ QWidget* HelpScreen::build_page() {
             QString desc;
         };
         const Action actions[] = {
-            {"", "create_account", tr("Create Account"), tr("Register for full access")},
-            {"", "reset_password", tr("Reset Password"), tr("Recover your account")},
             {"", "documentation", tr("Documentation"), tr("Guides, tutorials & API ref")},
             {"", "report_bug", tr("Report a Bug"), tr("Open a GitHub issue")},
             {"", "join_discord", tr("Join Discord"), tr("Community & live support")},
-            {"", "support_tickets", tr("Email Support"), tr("Or open a ticket in the Support tab")},
+            {"", "support_tickets", tr("Email Support"), tr("Write to support@fincept.in")},
         };
 
         int col = 0, row = 0;
@@ -285,11 +283,7 @@ QWidget* HelpScreen::build_page() {
             auto open = [btn](const QString& url) {
                 QObject::connect(btn, &QPushButton::clicked, btn, [url]() { QDesktopServices::openUrl(QUrl(url)); });
             };
-            if (key == "create_account")
-                connect(btn, &QPushButton::clicked, this, &HelpScreen::navigate_register);
-            else if (key == "reset_password")
-                connect(btn, &QPushButton::clicked, this, &HelpScreen::navigate_forgot_password);
-            else if (key == "documentation")
+            if (key == "documentation")
                 open(QStringLiteral("https://github.com/Fincept-Corporation/FinceptTerminal/tree/main/docs"));
             else if (key == "report_bug")
                 open(QStringLiteral("https://github.com/Fincept-Corporation/FinceptTerminal/issues/new"));
@@ -372,10 +366,10 @@ QWidget* HelpScreen::build_page() {
             QString detail;
         };
         const Step steps[] = {
-            {"1", tr("Create an account"), tr("Register at fincept.in or use the in-app sign-up.")},
-            {"2", tr("Complete setup"), tr("The setup wizard installs Python and configures your paths.")},
-            {"3", tr("Connect a data source"), tr("Add a broker or enable free data feeds in Data Sources.")},
-            {"4", tr("Explore the terminal"), tr("Browse Markets, Research, AI Chat, and QuantLib tabs.")},
+            {"1", tr("Complete setup"), tr("The setup wizard installs Python and configures your paths.")},
+            {"2", tr("Connect a data source"), tr("Add a broker or enable free data feeds in Data Sources.")},
+            {"3", tr("Configure an AI provider"), tr("Add your own API key in Settings → LLM Config.")},
+            {"4", tr("Explore the terminal"), tr("Browse Markets, Research, AI Chat, and the Dashboard.")},
         };
 
         auto* steps_widget = new QWidget(page);

@@ -9,7 +9,6 @@
 
 #include "app/DockScreenRouter.h"
 #include "app/WindowFrame.h"
-#include "auth/InactivityGuard.h"
 #include "core/components/PopularityTracker.h"
 #include "core/keys/WindowCycler.h"
 #include "core/logging/Logger.h"
@@ -45,15 +44,6 @@
 namespace fincept {
 
 void DockScreenRouter::navigate(const QString& id, bool exclusive) {
-    // Hard refuse while the lock screen is showing — signals/timers/keyboard
-    // shortcuts that would otherwise mutate panel state behind the PIN gate
-    // must be no-ops. WindowFrame also disables the dock_manager_ widget tree
-    // for keyboard/focus safety; this check catches programmatic callers.
-    if (auth::InactivityGuard::instance().is_terminal_locked()) {
-        LOG_DEBUG("DockRouter", QString("navigate('%1') suppressed — terminal locked").arg(id));
-        return;
-    }
-
     LOG_INFO("DockRouter", QString(">>> navigate('%1', exclusive=%2) opened_areas=%3")
                                .arg(id)
                                .arg(exclusive)

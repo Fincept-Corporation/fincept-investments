@@ -120,13 +120,12 @@ class McpProvider {
     // ── Phase 6.3: Authorization hook ──────────────────────────────────────
     /// Caller-supplied predicate that returns true iff the call should
     /// proceed. The hook receives the tool's required AuthLevel and
-    /// is_destructive flag; it is responsible for checking the active
-    /// session (AuthManager), prompting the user (modal dialog), and
-    /// returning the verdict synchronously. Hook lives in the app layer to
-    /// avoid pulling auth/UI headers into McpTypes.h.
+    /// is_destructive flag; it is responsible for prompting the user (modal
+    /// dialog) and returning the verdict synchronously. Hook lives in the app
+    /// layer to avoid pulling UI headers into McpTypes.h.
     ///
-    /// When unset, tools with auth_required > Authenticated or
-    /// is_destructive=true fail closed; lesser tools pass through.
+    /// When unset, tools with auth_required == ExplicitConfirm or
+    /// is_destructive=true fail closed; everything else passes through.
     using AuthChecker = std::function<bool(AuthLevel required, bool is_destructive)>;
     void set_auth_checker(AuthChecker checker);
 
@@ -136,8 +135,8 @@ class McpProvider {
     // was the AuthChecker installed by AgentService, which denies a destructive
     // tool ONLY when TerminalMcpBridge::is_call_in_progress() is true. The
     // interactive LLM tool loop calls McpService::execute_openai_function with
-    // no ScopedCallFlags, so that flag was false and every destructive tool
-    // below AuthLevel::Verified executed with no prompt of any kind.
+    // no ScopedCallFlags, so that flag was false and every non-ExplicitConfirm
+    // destructive tool executed with no prompt of any kind.
     //
     // The gate now fails closed: a tool that declares `is_destructive` is
     // refused unless destructive capability has been granted for the current
@@ -149,8 +148,8 @@ class McpProvider {
     //   2. Per session — set_destructive_allowed(true), persisted as
     //      `mcp/allow_destructive_tools`. Defaults to false.
     //
-    // AuthLevel::ExplicitConfirm tools additionally trip the >= Verified
-    // fail-closed branch below and stay refused even with the grant, until the
+    // AuthLevel::ExplicitConfirm tools additionally trip the fail-closed
+    // branch below and stay refused even with the grant, until the
     // confirmation modal lands.
 
     /// Grant/revoke destructive-tool capability for this session. Persists to

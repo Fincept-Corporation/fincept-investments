@@ -262,7 +262,6 @@ QJsonArray McpService::format_tools_for_openai() {
 //   navigate_to_tab     — UI navigation is the LLM's primary side-effect
 //   list_tabs           — what tabs exist?
 //   get_current_tab     — where is the user?
-//   get_auth_status     — guest vs signed-in changes valid actions
 static const QSet<QString>& tier_0_tool_names() {
     static const QSet<QString> kTier0 = {
         "tool_list",
@@ -270,7 +269,6 @@ static const QSet<QString>& tier_0_tool_names() {
         "navigate_to_tab",
         "list_tabs",
         "get_current_tab",
-        "get_auth_status",
         // Always-visible so the model checks chat→report linkage before any
         // report-builder work — prevents new chats from accidentally appending
         // to the previous chat's report.

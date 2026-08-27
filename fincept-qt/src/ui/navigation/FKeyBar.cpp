@@ -24,7 +24,7 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
         {"equity_trading", "EQUITY"}, {"portfolio", "PORTFOLIO"},  {"news", "NEWS"},
         {"ai_chat", "AI CHAT"},       {"backtesting", "BACKTEST"}, {"algo_trading", "ALGO"},
         {"node_editor", "NODES"},     {"code_editor", "CODE"},     {"ai_quant_lab", "QUANT LAB"},
-        {"quantlib", "QUANTLIB"},     {"settings", "SETTINGS"},    {"profile", "PROFILE"},
+        {"settings", "SETTINGS"},
     };
     for (const auto& def : tab_defs_)
         add_tab(def);

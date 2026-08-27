@@ -7,8 +7,8 @@
 
 #include "mcp/TerminalMcpBridge.h"
 
-#include "auth/ConstantTime.h"
-#include "auth/LoopbackGuard.h"
+#include "core/security/ConstantTime.h"
+#include "core/security/LoopbackGuard.h"
 #include "core/logging/Logger.h"
 #include "mcp/McpManager.h"
 #include "mcp/McpProvider.h"
@@ -285,12 +285,12 @@ bool TerminalMcpBridge::authenticate(const QString& supplied, QString* run_token
     // Constant-time throughout: `supplied` is attacker-controlled, and a
     // short-circuiting compare leaks how many leading bytes were right, which
     // turns a 128-bit guess into a byte-at-a-time search.
-    if (auth::constant_time_equals(supplied, token_))
+    if (security::constant_time_equals(supplied, token_))
         return true;
 
     QMutexLocker lock(&runs_mutex_);
     for (auto it = runs_.constBegin(); it != runs_.constEnd(); ++it) {
-        if (auth::constant_time_equals(supplied, it.key())) {
+        if (security::constant_time_equals(supplied, it.key())) {
             if (run_token_out)
                 *run_token_out = it.key();
             return true;
@@ -447,7 +447,7 @@ void TerminalMcpBridge::try_dispatch(QTcpSocket* sock) {
     // Python agent uses urllib and sends no Sec-Fetch-* at all, which the guard
     // passes through to the token check below.
     const quint16 bound_port = server_ ? static_cast<quint16>(server_->serverPort()) : 0;
-    const auto origin_check = auth::check_loopback_request(st.buffer, bound_port,
+    const auto origin_check = security::check_loopback_request(st.buffer, bound_port,
                                                            /*allow_cross_site_navigation=*/false);
     if (!origin_check.allowed) {
         LOG_WARN(TAG, QString("Rejecting request — %1 (path=%2)").arg(origin_check.reason, st.path));
@@ -558,7 +558,7 @@ void TerminalMcpBridge::handle_post_tool(QTcpSocket* sock, const QJsonObject& bo
     // attacker-controlled and the token is a capability.
     const QString destructive_hdr = req ? req->headers.value("x-mcp-allow-destructive") : QString();
     const bool destructive_ok =
-        !destructive_token_.isEmpty() && auth::constant_time_equals(destructive_hdr, destructive_token_);
+        !destructive_token_.isEmpty() && security::constant_time_equals(destructive_hdr, destructive_token_);
 
     // Dispatch OFF the GUI thread.
     //

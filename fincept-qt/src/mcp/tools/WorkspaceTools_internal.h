@@ -94,7 +94,6 @@ inline QJsonObject window_to_json(WindowFrame* w) {
         {"is_visible", w->isVisible()},
         {"is_active_for_work", w->is_active_for_work()},
         {"is_always_on_top", w->is_always_on_top()},
-        {"is_locked", w->is_locked()},
         {"current_screen_id", w->dock_router() ? w->dock_router()->current_screen_id() : QString()},
     };
 }
