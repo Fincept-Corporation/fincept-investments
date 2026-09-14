@@ -215,7 +215,9 @@ void AuthManager::clear_session() {
 }
 
 bool AuthManager::needs_pin_setup() const {
-    return session_.authenticated && !PinManager::instance().has_pin();
+    // Sign-in requirement disabled for this build: never require PIN setup so
+    // launch always goes straight to the dashboard (see initialize()).
+    return false;
 }
 
 // ── Initialize ───────────────────────────────────────────────────────────────
@@ -224,34 +226,25 @@ void AuthManager::initialize() {
     set_loading(true);
     load_session();
 
+    // Sign-in requirement disabled for this build: skip server-side session
+    // validation and the login/pricing gate entirely, and treat every launch
+    // as an authenticated, fully-paid session so WindowFrame::on_auth_state_changed
+    // routes straight to the dashboard. Any api_key the user still has saved
+    // (e.g. from before this change) is kept applied so LLM/cloud features that
+    // resolve it via fincept_api_key() keep working; it is not required.
     if (!session_.api_key.isEmpty()) {
-        // Apply api_key ONLY — do NOT send the stale session_token during
-        // startup validation. The server enforces single-session via
-        // X-Session-Token; sending a stale one triggers 401 even though
-        // the api_key is perfectly valid and permanent.
         auto& http = fincept::HttpClient::instance();
         http.set_auth_header(session_.api_key);
         http.clear_session_token();
-
-        validate_saved_session();
-        return;
     }
+
+    session_.authenticated = true;
+    session_.subscription.account_type = "enterprise";
+    session_.user_info.account_type = "enterprise";
+    session_.has_subscription = true;
 
     set_loading(false);
     emit auth_state_changed();
-}
-
-void AuthManager::validate_saved_session() {
-    // Validate the saved api_key by fetching the user profile.
-    // We intentionally do NOT send X-Session-Token here — the api_key is
-    // the permanent credential. A stale session_token would cause a false 401.
-    //
-    // Flow:
-    //   api_key valid (200) → fetch subscription → mark authenticated → save
-    //   api_key revoked (401/403) → clear everything → show login
-    //   network error → trust cached session data (offline-friendly)
-    LOG_INFO("Auth", "Validating saved session via profile fetch (api_key only, no session_token)");
-    fetch_user_profile([this] { emit subscription_fetched(); });
 }
 
 void AuthManager::fetch_user_profile(std::function<void()> on_done) {

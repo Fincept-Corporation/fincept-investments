@@ -87,7 +87,6 @@ class AuthManager : public QObject {
     // One-shot: move secrets out of the legacy plaintext settings rows into
     // SecureStorage, then purge the cleartext copies (CR-08). Idempotent.
     void migrate_legacy_plaintext_credentials();
-    void validate_saved_session();
     void fetch_user_profile(std::function<void()> on_done = {});
     void fetch_user_subscription(std::function<void()> on_done = {});
     void complete_auth_flow(std::function<void()> on_done);

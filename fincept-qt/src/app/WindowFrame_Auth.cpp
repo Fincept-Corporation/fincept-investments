@@ -125,7 +125,11 @@ void WindowFrame::on_auth_state_changed() {
             // pin_gate_cleared_. If we are about to show the shell while
             // still locked or ungated, log a warning so the regression is
             // visible rather than leaking the dashboard for one frame.
-            if (locked_ || !pin_gate_cleared_) {
+            // Gated on needs_pin_setup()/has_pin() too: with sign-in disabled
+            // (needs_pin_setup() always false, no PIN ever configured),
+            // pin_gate_cleared_ legitimately stays false forever — there is
+            // no gate to clear, so it must not force the lock screen here.
+            if (locked_ || (!pin_gate_cleared_ && (auth.needs_pin_setup() || auth::PinManager::instance().has_pin()))) {
                 LOG_WARN("WindowFrame", QString("on_auth_state_changed: shell would become visible while "
                                                 "locked=%1 gate_cleared=%2 — forcing lock screen")
                                             .arg(locked_)
